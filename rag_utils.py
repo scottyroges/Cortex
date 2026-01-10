@@ -14,6 +14,7 @@ Core utilities for the Cortex MCP server including:
 import os
 import re
 import subprocess
+import time
 from pathlib import Path
 from typing import Any, Optional
 
@@ -22,6 +23,10 @@ from chromadb.config import Settings
 from flashrank import Ranker, RerankRequest
 from langchain_text_splitters import Language
 from rank_bm25 import BM25Okapi
+
+from logging_config import get_logger
+
+logger = get_logger("rag")
 
 # --- Secret Scrubbing ---
 
@@ -220,6 +225,7 @@ class BM25Index:
         where_filter: Optional[dict] = None,
     ) -> None:
         """Build BM25 index from ChromaDB collection documents."""
+        start_time = time.time()
         results = collection.get(
             where=where_filter,
             include=["documents", "metadatas"],
@@ -229,6 +235,7 @@ class BM25Index:
             self.index = None
             self.documents = []
             self.doc_ids = []
+            logger.debug("BM25 index: empty collection")
             return
 
         self.doc_ids = results["ids"]
@@ -244,6 +251,8 @@ class BM25Index:
         # Tokenize for BM25
         tokenized = [doc.lower().split() for doc in results["documents"]]
         self.index = BM25Okapi(tokenized)
+        elapsed = time.time() - start_time
+        logger.debug(f"BM25 index built: {len(self.documents)} docs in {elapsed*1000:.1f}ms")
 
     def search(self, query: str, top_k: int = 50) -> list[dict[str, Any]]:
         """Search using BM25 and return scored documents."""
@@ -337,12 +346,14 @@ class HybridSearcher:
             self.build_index(where_filter)
 
         # Vector search
+        vector_start = time.time()
         vector_results = self.collection.query(
             query_texts=[query],
             n_results=top_k,
             where=where_filter,
             include=["documents", "metadatas", "distances"],
         )
+        vector_time = time.time() - vector_start
 
         # Format vector results
         formatted_vector = []
@@ -361,12 +372,19 @@ class HybridSearcher:
                         "vector_distance": dist,
                     }
                 )
+        logger.debug(f"Vector search: {len(formatted_vector)} results in {vector_time*1000:.1f}ms")
 
         # BM25 search
+        bm25_start = time.time()
         bm25_results = self.bm25_index.search(query, top_k=top_k)
+        bm25_time = time.time() - bm25_start
+        logger.debug(f"BM25 search: {len(bm25_results)} results in {bm25_time*1000:.1f}ms")
 
         # RRF fusion
-        return reciprocal_rank_fusion(formatted_vector, bm25_results)
+        fused = reciprocal_rank_fusion(formatted_vector, bm25_results)
+        logger.debug(f"RRF fusion: {len(fused)} unique docs")
+
+        return fused
 
 
 # --- FlashRank Reranker ---
@@ -399,6 +417,8 @@ class RerankerService:
         if not documents:
             return []
 
+        start_time = time.time()
+
         # Prepare passages for FlashRank
         passages = []
         for i, doc in enumerate(documents):
@@ -419,6 +439,9 @@ class RerankerService:
                     "rerank_score": r["score"],
                 }
             )
+
+        elapsed = time.time() - start_time
+        logger.debug(f"Reranking: {len(documents)} docs -> top {len(results)} in {elapsed*1000:.1f}ms")
 
         return results
 

@@ -11,6 +11,7 @@ Handles:
 import hashlib
 import json
 import os
+import time
 from pathlib import Path
 from typing import Any, Generator, Optional
 
@@ -19,7 +20,10 @@ from anthropic import Anthropic
 from langchain_text_splitters import Language, RecursiveCharacterTextSplitter
 from tenacity import retry, stop_after_attempt, wait_exponential
 
+from logging_config import get_logger
 from rag_utils import detect_language, get_current_branch, scrub_secrets
+
+logger = get_logger("ingest")
 
 # --- Configuration ---
 
@@ -332,10 +336,12 @@ def ingest_file(
     """
     try:
         content = file_path.read_text(encoding="utf-8", errors="ignore")
-    except (OSError, IOError):
+    except (OSError, IOError) as e:
+        logger.debug(f"Skipped (read error): {file_path} - {e}")
         return []
 
     if not content.strip():
+        logger.debug(f"Skipped (empty): {file_path}")
         return []
 
     # Detect language and scrub secrets
@@ -346,10 +352,12 @@ def ingest_file(
     chunks = chunk_code_file(content, language, chunk_size, chunk_overlap)
 
     if not chunks:
+        logger.debug(f"Skipped (no chunks): {file_path}")
         return []
 
     doc_ids = []
     path_str = str(file_path)
+    lang_str = language.value if language else "unknown"
 
     for i, chunk in enumerate(chunks):
         # Generate contextual header
@@ -378,13 +386,14 @@ def ingest_file(
                     "branch": branch,
                     "chunk_index": i,
                     "total_chunks": len(chunks),
-                    "language": language.value if language else "unknown",
+                    "language": lang_str,
                     "type": "code",
                 }
             ],
         )
         doc_ids.append(doc_id)
 
+    logger.debug(f"File: {file_path.name} -> {len(chunks)} chunks ({lang_str})")
     return doc_ids
 
 
@@ -412,9 +421,12 @@ def ingest_codebase(
     Returns:
         Stats about the ingestion
     """
+    start_time = time.time()
     root = Path(root_path)
     project_id = project_id or root.name
     branch = get_current_branch(root_path)
+
+    logger.info(f"Starting ingestion: {root_path} (project={project_id}, branch={branch})")
 
     stats = {
         "project": project_id,
@@ -422,7 +434,7 @@ def ingest_codebase(
         "files_scanned": 0,
         "files_processed": 0,
         "files_skipped": 0,
-        "chunks_added": 0,
+        "chunks_created": 0,
         "errors": [],
     }
 
@@ -432,9 +444,13 @@ def ingest_codebase(
     # Walk codebase
     all_files = list(walk_codebase(root_path))
     stats["files_scanned"] = len(all_files)
+    logger.debug(f"Scanned: {len(all_files)} files")
 
     # Filter to changed files
     files_to_process = all_files if force_full else get_changed_files(all_files, state)
+    skipped_unchanged = len(all_files) - len(files_to_process)
+    if skipped_unchanged > 0:
+        logger.debug(f"Skipped (unchanged): {skipped_unchanged} files")
 
     for file_path in files_to_process:
         try:
@@ -449,7 +465,7 @@ def ingest_codebase(
 
             if doc_ids:
                 stats["files_processed"] += 1
-                stats["chunks_added"] += len(doc_ids)
+                stats["chunks_created"] += len(doc_ids)
 
                 # Update state with new hash
                 state[str(file_path)] = compute_file_hash(file_path)
@@ -457,11 +473,15 @@ def ingest_codebase(
                 stats["files_skipped"] += 1
 
         except Exception as e:
+            logger.warning(f"Error processing {file_path}: {e}")
             stats["errors"].append({"file": str(file_path), "error": str(e)})
             stats["files_skipped"] += 1
 
     # Save updated state
     save_state(state, state_file)
+
+    elapsed = time.time() - start_time
+    logger.info(f"Ingestion complete: {stats['files_processed']} files, {stats['chunks_created']} chunks in {elapsed:.1f}s")
 
     return stats
 

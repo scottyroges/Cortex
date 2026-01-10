@@ -99,6 +99,51 @@ Runtime settings via `configure_cortex`:
 | `top_k_rerank` | 5 | Final results after reranking |
 | `use_haiku` | true | Generate contextual headers via Haiku |
 
+## Debugging
+
+### Debug Logging
+
+Enable debug logging to see detailed search/ingestion pipeline info:
+
+```bash
+docker run -i --rm \
+  -v ~/cortex_db:/app/cortex_db \
+  -v ~/MyProject:/projects \
+  -e ANTHROPIC_API_KEY=sk-ant-... \
+  -e CORTEX_DEBUG=true \
+  -e CORTEX_LOG_FILE=/app/cortex_db/debug.log \
+  cortex
+
+# Tail the log in another terminal
+tail -f ~/cortex_db/debug.log
+```
+
+### HTTP Debug Server
+
+Enable the optional HTTP server for database inspection:
+
+```bash
+docker run -i --rm \
+  -p 8080:8080 \
+  -v ~/cortex_db:/app/cortex_db \
+  -v ~/MyProject:/projects \
+  -e ANTHROPIC_API_KEY=sk-ant-... \
+  -e CORTEX_HTTP=true \
+  cortex
+```
+
+Debug endpoints:
+- `GET /debug/stats` - Collection statistics by project/type/language
+- `GET /debug/sample?limit=10` - Sample documents
+- `GET /debug/list?project=X` - List documents by project
+- `GET /debug/get/{doc_id}` - Get specific document
+- `GET /debug/search?q=X` - Raw search with timing info
+
+Phase 2 endpoints (for CLI/Web Clipper):
+- `GET /search?q=X&limit=5` - Search with reranking
+- `POST /ingest` - Ingest web content
+- `POST /note` - Save a note
+
 ## Development
 
 ### Run Tests

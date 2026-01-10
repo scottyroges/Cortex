@@ -21,7 +21,7 @@ A local, privacy-first "Second Brain" for Claude Code. Acts as an **Episodic & L
 |-----------|---------------|--------|
 | Runtime | Docker (Python 3.11 Slim) | ✅ |
 | MCP Interface | Stdio transport | ✅ |
-| FastAPI Interface | HTTP for Web Clipper/CLI | ⬜ |
+| FastAPI Interface | HTTP for Web Clipper/CLI | 🔄 |
 | Vector Storage | ChromaDB (Persistent) | ✅ |
 | Keyword Search | BM25 (rank_bm25) | ✅ |
 | Reranking | FlashRank (Local Cross-Encoder) | ✅ |
@@ -78,10 +78,10 @@ A local, privacy-first "Second Brain" for Claude Code. Acts as an **Episodic & L
 
 | Feature | Description | Status |
 |---------|-------------|--------|
-| FastAPI Bridge | HTTP endpoint at `localhost:8090/ingest` | ⬜ |
+| FastAPI Bridge | HTTP endpoint at `localhost:8080/ingest` | ✅ |
 | Tampermonkey Script | "Save to Brain" button for browsers | ⬜ |
 | Target Sites | Gemini, ChatGPT, Confluence, docs sites | ⬜ |
-| `ingest_web_to_cortex` | URL + content ingestion endpoint | ⬜ |
+| `ingest_web_to_cortex` | URL + content ingestion endpoint | ✅ |
 
 ### CLI & Slash Commands
 

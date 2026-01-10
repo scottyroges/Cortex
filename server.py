@@ -3,16 +3,25 @@ Cortex MCP Server
 
 A local, privacy-first memory system for Claude Code.
 Provides RAG capabilities with ChromaDB, FlashRank reranking, and AST-aware chunking.
+
+Environment variables:
+    CORTEX_DEBUG: Enable debug logging (default: false)
+    CORTEX_LOG_FILE: Log file path (default: stderr)
+    CORTEX_HTTP: Enable HTTP server for debugging (default: false)
 """
 
+import argparse
 import json
 import os
+import threading
+import time
 from typing import Optional
 
 from anthropic import Anthropic
 from mcp.server.fastmcp import FastMCP
 
 from ingest import ingest_codebase, ingest_files
+from logging_config import get_logger, setup_logging
 from rag_utils import (
     HybridSearcher,
     RerankerService,
@@ -22,6 +31,10 @@ from rag_utils import (
     get_or_create_collection,
     scrub_secrets,
 )
+
+# Initialize logging
+setup_logging()
+logger = get_logger("server")
 
 # --- Initialize MCP Server ---
 
@@ -105,7 +118,11 @@ def search_cortex(
         JSON with search results including content, file paths, and scores
     """
     if not CONFIG["enabled"]:
+        logger.info("Search rejected: Cortex is disabled")
         return json.dumps({"error": "Cortex is disabled", "results": []})
+
+    logger.info(f"Search query: '{query}' (scope={scope}, project={project})")
+    start_time = time.time()
 
     try:
         collection = get_collection()
@@ -120,14 +137,18 @@ def search_cortex(
             where_filter = {"project": project}
 
         # Hybrid search
+        search_start = time.time()
         candidates = searcher.search(
             query=query,
             top_k=CONFIG["top_k_retrieve"],
             where_filter=where_filter,
             rebuild_index=True,  # Rebuild for fresh results
         )
+        search_time = time.time() - search_start
+        logger.debug(f"Hybrid search: {len(candidates)} candidates in {search_time*1000:.1f}ms")
 
         if not candidates:
+            logger.info("Search: no candidates found")
             return json.dumps({
                 "query": query,
                 "results": [],
@@ -135,15 +156,24 @@ def search_cortex(
             })
 
         # Rerank with FlashRank
+        rerank_start = time.time()
         reranked = reranker.rerank(
             query=query,
             documents=candidates,
             top_k=CONFIG["top_k_rerank"],
         )
+        rerank_time = time.time() - rerank_start
+        logger.debug(f"Reranking: {len(reranked)} results in {rerank_time*1000:.1f}ms")
 
         # Apply minimum score filter
         threshold = min_score if min_score is not None else CONFIG["min_score"]
         filtered = [r for r in reranked if r.get("rerank_score", 0) >= threshold]
+        logger.debug(f"Score filter (>={threshold}): {len(filtered)} results")
+
+        # Log top results
+        for i, r in enumerate(filtered[:5]):
+            meta = r.get("meta", {})
+            logger.debug(f"  [{i}] score={r.get('rerank_score', 0):.3f} file={meta.get('file_path', 'unknown')}")
 
         # Format response
         results = []
@@ -170,9 +200,13 @@ def search_cortex(
             response["config"] = CONFIG
             response["branch_context"] = current_branch
 
+        total_time = time.time() - start_time
+        logger.info(f"Search complete: {len(results)} results in {total_time*1000:.1f}ms")
+
         return json.dumps(response, indent=2)
 
     except Exception as e:
+        logger.error(f"Search error: {e}")
         return json.dumps({"error": str(e), "results": []})
 
 
@@ -196,6 +230,9 @@ def ingest_code_into_cortex(
     Returns:
         JSON with ingestion statistics
     """
+    logger.info(f"Ingesting codebase: path={path}, project={project_name}, force_full={force_full}")
+    start_time = time.time()
+
     try:
         collection = get_collection()
         anthropic = get_anthropic() if CONFIG["use_haiku"] else None
@@ -212,6 +249,9 @@ def ingest_code_into_cortex(
         # Rebuild search index after ingestion
         get_searcher().build_index()
 
+        total_time = time.time() - start_time
+        logger.info(f"Ingestion complete: {stats.get('files_processed', 0)} files, {stats.get('chunks_created', 0)} chunks in {total_time:.1f}s")
+
         return json.dumps({
             "status": "success",
             "path": path,
@@ -219,6 +259,7 @@ def ingest_code_into_cortex(
         }, indent=2)
 
     except Exception as e:
+        logger.error(f"Ingestion error: {e}")
         return json.dumps({
             "status": "error",
             "error": str(e),
@@ -246,6 +287,9 @@ def commit_to_cortex(
     Returns:
         JSON with commit status and re-indexing stats
     """
+    logger.info(f"Committing to Cortex: {len(changed_files)} files, project={project}")
+    start_time = time.time()
+
     try:
         collection = get_collection()
         anthropic = get_anthropic() if CONFIG["use_haiku"] else None
@@ -267,6 +311,7 @@ def commit_to_cortex(
                 "files": json.dumps(changed_files),
             }],
         )
+        logger.debug(f"Saved commit summary: {note_id}")
 
         # Re-index the changed files
         reindex_stats = ingest_files(
@@ -276,9 +321,13 @@ def commit_to_cortex(
             anthropic_client=anthropic,
             use_haiku=CONFIG["use_haiku"],
         )
+        logger.debug(f"Re-indexed files: {reindex_stats}")
 
         # Rebuild search index
         get_searcher().build_index()
+
+        total_time = time.time() - start_time
+        logger.info(f"Commit complete: {note_id} in {total_time:.1f}s")
 
         return json.dumps({
             "status": "success",
@@ -288,6 +337,7 @@ def commit_to_cortex(
         }, indent=2)
 
     except Exception as e:
+        logger.error(f"Commit error: {e}")
         return json.dumps({
             "status": "error",
             "error": str(e),
@@ -313,6 +363,8 @@ def save_note_to_cortex(
     Returns:
         JSON with note ID and save status
     """
+    logger.info(f"Saving note: title='{title}', project={project}")
+
     try:
         import uuid
 
@@ -341,6 +393,8 @@ def save_note_to_cortex(
         # Rebuild search index
         get_searcher().build_index()
 
+        logger.info(f"Note saved: {note_id}")
+
         return json.dumps({
             "status": "saved",
             "note_id": note_id,
@@ -348,6 +402,7 @@ def save_note_to_cortex(
         }, indent=2)
 
     except Exception as e:
+        logger.error(f"Note save error: {e}")
         return json.dumps({
             "status": "error",
             "error": str(e),
@@ -375,20 +430,31 @@ def configure_cortex(
     Returns:
         JSON with updated configuration
     """
+    changes = []
     if min_score is not None:
         CONFIG["min_score"] = max(0.0, min(1.0, min_score))
+        changes.append(f"min_score={CONFIG['min_score']}")
 
     if verbose is not None:
         CONFIG["verbose"] = verbose
+        changes.append(f"verbose={verbose}")
 
     if top_k_retrieve is not None:
         CONFIG["top_k_retrieve"] = max(10, min(200, top_k_retrieve))
+        changes.append(f"top_k_retrieve={CONFIG['top_k_retrieve']}")
 
     if top_k_rerank is not None:
         CONFIG["top_k_rerank"] = max(1, min(50, top_k_rerank))
+        changes.append(f"top_k_rerank={CONFIG['top_k_rerank']}")
 
     if use_haiku is not None:
         CONFIG["use_haiku"] = use_haiku
+        changes.append(f"use_haiku={use_haiku}")
+
+    if changes:
+        logger.info(f"Configuration updated: {', '.join(changes)}")
+    else:
+        logger.debug("Configure called with no changes")
 
     return json.dumps({
         "status": "configured",
@@ -411,6 +477,7 @@ def toggle_cortex(enabled: bool) -> str:
         JSON with current status
     """
     CONFIG["enabled"] = enabled
+    logger.info(f"Cortex {'enabled' if enabled else 'disabled'}")
 
     # Also return stats when enabled
     stats = {}
@@ -418,6 +485,7 @@ def toggle_cortex(enabled: bool) -> str:
         try:
             collection = get_collection()
             stats = get_collection_stats(collection)
+            logger.debug(f"Stats: {stats}")
         except Exception:
             pass
 
@@ -430,5 +498,30 @@ def toggle_cortex(enabled: bool) -> str:
 
 # --- Entry Point ---
 
+
+def start_http_server():
+    """Start the FastAPI HTTP server in a background thread."""
+    from http_server import run_server
+    http_thread = threading.Thread(target=run_server, daemon=True)
+    http_thread.start()
+    logger.info("HTTP server started on port 8080")
+
+
 if __name__ == "__main__":
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="Cortex MCP Server")
+    parser.add_argument(
+        "--http",
+        action="store_true",
+        help="Enable HTTP server for debugging and Phase 2 features",
+    )
+    args = parser.parse_args()
+
+    # Check for CORTEX_HTTP environment variable
+    enable_http = args.http or os.environ.get("CORTEX_HTTP", "").lower() in ("true", "1", "yes")
+
+    if enable_http:
+        start_http_server()
+
+    logger.info("Starting Cortex MCP server")
     mcp.run()
