@@ -48,6 +48,63 @@ claude mcp add cortex cortex
 
 Then restart Claude Code. That's it!
 
+## Configuration
+
+### Settings File
+
+Cortex configuration lives in `~/.cortex/settings.json`. Create it with `cortex init` or edit manually:
+
+```json
+{
+  "code_paths": ["~/Projects", "~/Work"],
+  "header_provider": "none",
+  "debug": false
+}
+```
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `code_paths` | string[] | `[]` | Directories containing code to index |
+| `header_provider` | string | `"none"` | `"none"`, `"claude-cli"`, or `"anthropic"` |
+| `debug` | bool | `false` | Enable debug logging |
+
+### Managing Configuration
+
+```bash
+# View current settings
+cortex config
+
+# Edit settings in your $EDITOR
+cortex config edit
+```
+
+After changing settings, restart the daemon:
+```bash
+cortex daemon restart
+```
+
+### Environment Variable Overrides
+
+Environment variables can override settings.json (useful for CI/testing):
+
+| Variable | Description |
+|----------|-------------|
+| `CORTEX_CODE_PATHS` | Comma-separated code directories |
+| `CORTEX_HEADER_PROVIDER` | Header provider |
+| `CORTEX_DEBUG` | Enable debug logging |
+| `CORTEX_DATA_PATH` | Data directory (default: `~/.cortex`) |
+| `ANTHROPIC_API_KEY` | Required for `header_provider=anthropic` |
+
+### Header Providers
+
+Contextual headers add AI-generated summaries to each code chunk:
+
+| Provider | Description |
+|----------|-------------|
+| `none` | No headers (fastest, default) |
+| `claude-cli` | Uses Claude CLI - leverages your existing Claude auth |
+| `anthropic` | Uses Anthropic API - requires `ANTHROPIC_API_KEY` |
+
 ## Daemon Management
 
 Cortex runs as a singleton daemon in Docker. The daemon starts automatically when Claude Code connects, but you can manage it manually:
@@ -116,74 +173,6 @@ Files with unsupported extensions are still indexed using generic text splitting
             │   Reranker    │      │   (Embedded)    │
             └───────────────┘      └─────────────────┘
 ```
-
-## Configuration
-
-### Settings File
-
-Cortex configuration lives in `~/.cortex/settings.json`. Create it with `cortex init` or edit manually:
-
-```json
-{
-  "code_paths": ["~/Projects", "~/Work"],
-  "header_provider": "none",
-  "debug": false
-}
-```
-
-| Setting | Type | Default | Description |
-|---------|------|---------|-------------|
-| `code_paths` | string[] | `[]` | Directories containing code to index |
-| `header_provider` | string | `"none"` | `"none"`, `"claude-cli"`, or `"anthropic"` |
-| `debug` | bool | `false` | Enable debug logging |
-
-### Managing Configuration
-
-```bash
-# View current settings
-cortex config
-
-# Edit settings in your $EDITOR
-cortex config edit
-```
-
-After changing settings, restart the daemon:
-```bash
-cortex daemon restart
-```
-
-### Environment Variable Overrides
-
-Environment variables can override settings.json (useful for CI/testing):
-
-| Variable | Description |
-|----------|-------------|
-| `CORTEX_CODE_PATHS` | Comma-separated code directories |
-| `CORTEX_HEADER_PROVIDER` | Header provider |
-| `CORTEX_DEBUG` | Enable debug logging |
-| `CORTEX_DATA_PATH` | Data directory (default: `~/.cortex`) |
-| `ANTHROPIC_API_KEY` | Required for `header_provider=anthropic` |
-
-### Runtime Settings
-
-Adjust via `configure_cortex` tool:
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `min_score` | 0.3 | Minimum rerank score threshold (0-1) |
-| `verbose` | false | Include debug info in responses |
-| `top_k_retrieve` | 50 | Candidates before reranking |
-| `top_k_rerank` | 5 | Final results after reranking |
-
-### Header Providers
-
-Contextual headers add AI-generated summaries to each code chunk:
-
-| Provider | Description |
-|----------|-------------|
-| `none` | No headers (fastest, default) |
-| `claude-cli` | Uses Claude CLI - leverages your existing Claude auth |
-| `anthropic` | Uses Anthropic API - requires `ANTHROPIC_API_KEY` |
 
 ## Debugging
 
