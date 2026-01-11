@@ -108,37 +108,13 @@ A local, privacy-first "Second Brain" for Claude Code. Acts as an **Episodic & L
 5. Filter skeleton results by current branch
 6. Store `origin_branch` on notes/commits (for reference, not filtering)
 
-### Metadata Quality Improvements ⬜
+### Metadata Quality Improvements ✅
 
-**Problem**: Chunk metadata lacks semantic context, tags stored incorrectly.
+Added function/class scope extraction and fixed tags storage:
 
-| Issue | Current | Impact |
-|-------|---------|--------|
-| No function/class names | Only file path | Can't pinpoint which function |
-| Tags as comma-string | `"auth,security"` | Can't filter by individual tag |
+1. **Extract function/class names during chunking**: New `extract_scope_from_chunk()` in `ingest.py` uses language-specific regex patterns to detect containing scope. Metadata now includes `function_name`, `class_name`, and `scope` (full path like `AuthService.validate_token`).
 
-**Fix Required** (`ingest.py`, `server.py`):
-
-1. **Extract function/class names during chunking**:
-```python
-# During AST chunking, detect containing scope
-metadata = {
-    "file_path": "/src/auth.py",
-    "function_name": "validate_token",  # NEW
-    "class_name": "AuthService",        # NEW
-    "scope": "AuthService.validate_token",  # NEW - full path
-}
-```
-
-2. **Store tags as JSON array** (not comma-separated):
-```python
-# Before
-metadatas=[{"tags": ",".join(tags)}]  # "auth,security"
-
-# After
-metadatas=[{"tags": json.dumps(tags)}]  # '["auth", "security"]'
-# Or use ChromaDB's native list support if available
-```
+2. **Store tags as JSON array**: Changed from `",".join(tags)` to `json.dumps(tags)` in `save_note_to_cortex()`.
 
 ### Missing Timestamps on Documents ✅
 

@@ -427,6 +427,121 @@ def get_changed_files(
 # --- AST Chunking ---
 
 
+def extract_scope_from_chunk(chunk: str, language: Optional[Language]) -> dict:
+    """
+    Extract function/class names from a code chunk.
+
+    Uses regex patterns to identify the containing scope without full AST parsing.
+    Returns the innermost scope found in the chunk.
+
+    Args:
+        chunk: The code chunk text
+        language: Detected language (for language-specific patterns)
+
+    Returns:
+        Dict with function_name, class_name, and scope (full path)
+    """
+    import re
+
+    result = {
+        "function_name": None,
+        "class_name": None,
+        "scope": None,
+    }
+
+    if not chunk or not language:
+        return result
+
+    # Language-specific patterns
+    patterns = {
+        # Python: def func_name, class ClassName, async def func_name
+        Language.PYTHON: {
+            "function": r"(?:async\s+)?def\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(",
+            "class": r"class\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*[:\(]",
+        },
+        # JavaScript/TypeScript: function name, const name =, class Name
+        # Excludes control flow keywords (if, for, while, switch, catch)
+        Language.JS: {
+            "function": r"(?:function\s+([a-zA-Z_$][a-zA-Z0-9_$]*)|(?:const|let|var)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=\s*(?:async\s*)?\()",
+            "class": r"class\s+([a-zA-Z_$][a-zA-Z0-9_$]*)",
+        },
+        Language.TS: {
+            "function": r"(?:function\s+([a-zA-Z_$][a-zA-Z0-9_$]*)|(?:const|let|var)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=\s*(?:async\s*)?\()",
+            "class": r"class\s+([a-zA-Z_$][a-zA-Z0-9_$]*)",
+        },
+        # Go: func name, func (receiver) name, type Name struct
+        Language.GO: {
+            "function": r"func\s+(?:\([^)]+\)\s+)?([a-zA-Z_][a-zA-Z0-9_]*)\s*\(",
+            "class": r"type\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+struct",
+        },
+        # Rust: fn name, impl Name, struct Name
+        Language.RUST: {
+            "function": r"(?:pub\s+)?(?:async\s+)?fn\s+([a-zA-Z_][a-zA-Z0-9_]*)",
+            "class": r"(?:pub\s+)?(?:struct|impl|enum)\s+([a-zA-Z_][a-zA-Z0-9_]*)",
+        },
+        # Java/Kotlin: class Name, void/type methodName
+        Language.JAVA: {
+            "function": r"(?:public|private|protected|static|\s)+[\w<>\[\]]+\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(",
+            "class": r"(?:public\s+)?(?:abstract\s+)?(?:final\s+)?class\s+([a-zA-Z_][a-zA-Z0-9_]*)",
+        },
+        Language.KOTLIN: {
+            "function": r"(?:fun|suspend\s+fun)\s+([a-zA-Z_][a-zA-Z0-9_]*)",
+            "class": r"(?:class|object|interface)\s+([a-zA-Z_][a-zA-Z0-9_]*)",
+        },
+        # Ruby: def method_name, class ClassName
+        Language.RUBY: {
+            "function": r"def\s+(?:self\.)?([a-zA-Z_][a-zA-Z0-9_?!]*)",
+            "class": r"(?:class|module)\s+([A-Z][a-zA-Z0-9_]*)",
+        },
+        # C/C++: return_type function_name, class Name
+        Language.C: {
+            "function": r"(?:[\w*]+\s+)+([a-zA-Z_][a-zA-Z0-9_]*)\s*\([^;]*\)\s*{",
+            "class": r"(?:struct|class)\s+([a-zA-Z_][a-zA-Z0-9_]*)",
+        },
+        Language.CPP: {
+            "function": r"(?:[\w*:]+\s+)*([a-zA-Z_][a-zA-Z0-9_]*)\s*\([^;]*\)\s*(?:const\s*)?(?:override\s*)?{",
+            "class": r"(?:struct|class)\s+([a-zA-Z_][a-zA-Z0-9_]*)",
+        },
+    }
+
+    # Get patterns for this language (fallback to Python-like patterns)
+    lang_patterns = patterns.get(language, patterns.get(Language.PYTHON, {}))
+
+    # Find all classes in the chunk (take the first/outermost one)
+    class_pattern = lang_patterns.get("class")
+    if class_pattern:
+        class_matches = re.findall(class_pattern, chunk)
+        if class_matches:
+            # Take the first match (outermost class)
+            match = class_matches[0]
+            result["class_name"] = match if isinstance(match, str) else match[0] if match else None
+
+    # Find all functions in the chunk (take the last/innermost one)
+    func_pattern = lang_patterns.get("function")
+    if func_pattern:
+        func_matches = re.findall(func_pattern, chunk)
+        if func_matches:
+            # Take the last match (innermost function, most specific)
+            match = func_matches[-1]
+            # Handle tuple results from multiple capture groups
+            if isinstance(match, tuple):
+                result["function_name"] = next((m for m in match if m), None)
+            else:
+                result["function_name"] = match
+
+    # Build full scope path
+    scope_parts = []
+    if result["class_name"]:
+        scope_parts.append(result["class_name"])
+    if result["function_name"]:
+        scope_parts.append(result["function_name"])
+
+    if scope_parts:
+        result["scope"] = ".".join(scope_parts)
+
+    return result
+
+
 def chunk_code_file(
     content: str,
     language: Optional[Language],
@@ -629,28 +744,40 @@ def ingest_file(
             header_provider=header_provider,
         )
 
+        # Extract function/class scope from chunk
+        scope_info = extract_scope_from_chunk(chunk, language)
+
         # Combine header with chunk
         full_text = f"{header}\n\n---\n\n{chunk}"
 
         # Create document ID
         doc_id = f"{project_id}:{path_str}:{i}"
 
+        # Build metadata with scope info
+        metadata = {
+            "file_path": path_str,
+            "project": project_id,
+            "branch": branch,
+            "chunk_index": i,
+            "total_chunks": len(chunks),
+            "language": lang_str,
+            "type": "code",
+            "indexed_at": indexed_at,
+        }
+
+        # Add scope fields if detected (ChromaDB doesn't allow None values)
+        if scope_info["function_name"]:
+            metadata["function_name"] = scope_info["function_name"]
+        if scope_info["class_name"]:
+            metadata["class_name"] = scope_info["class_name"]
+        if scope_info["scope"]:
+            metadata["scope"] = scope_info["scope"]
+
         # Upsert to collection
         collection.upsert(
             ids=[doc_id],
             documents=[full_text],
-            metadatas=[
-                {
-                    "file_path": path_str,
-                    "project": project_id,
-                    "branch": branch,
-                    "chunk_index": i,
-                    "total_chunks": len(chunks),
-                    "language": lang_str,
-                    "type": "code",
-                    "indexed_at": indexed_at,
-                }
-            ],
+            metadatas=[metadata],
         )
         doc_ids.append(doc_id)
 

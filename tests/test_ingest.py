@@ -16,6 +16,7 @@ from ingest import (
     cleanup_state_entries,
     compute_file_hash,
     delete_file_chunks,
+    extract_scope_from_chunk,
     generate_tree_structure,
     get_changed_files,
     get_git_changed_files,
@@ -215,6 +216,126 @@ class TestChunking:
 
         assert len(chunks) > 1
         assert all(len(c) <= 1000 for c in chunks)
+
+
+class TestScopeExtraction:
+    """Tests for function/class scope extraction from code chunks."""
+
+    def test_extract_python_function(self):
+        """Test extracting Python function name."""
+        chunk = '''def calculate_total(items):
+    """Calculate total price."""
+    return sum(item.price for item in items)
+'''
+        result = extract_scope_from_chunk(chunk, Language.PYTHON)
+        assert result["function_name"] == "calculate_total"
+        assert result["class_name"] is None
+        assert result["scope"] == "calculate_total"
+
+    def test_extract_python_class(self):
+        """Test extracting Python class name."""
+        chunk = '''class OrderService:
+    """Service for managing orders."""
+
+    def __init__(self, db):
+        self.db = db
+'''
+        result = extract_scope_from_chunk(chunk, Language.PYTHON)
+        assert result["class_name"] == "OrderService"
+        assert result["function_name"] == "__init__"
+        assert result["scope"] == "OrderService.__init__"
+
+    def test_extract_python_async_function(self):
+        """Test extracting async Python function."""
+        chunk = '''async def fetch_data(url):
+    async with aiohttp.ClientSession() as session:
+        return await session.get(url)
+'''
+        result = extract_scope_from_chunk(chunk, Language.PYTHON)
+        assert result["function_name"] == "fetch_data"
+        assert result["scope"] == "fetch_data"
+
+    def test_extract_javascript_function(self):
+        """Test extracting JavaScript function name."""
+        chunk = '''function validateInput(data) {
+    if (!data.name) {
+        throw new Error('Name required');
+    }
+}
+'''
+        result = extract_scope_from_chunk(chunk, Language.JS)
+        assert result["function_name"] == "validateInput"
+        assert result["scope"] == "validateInput"
+
+    def test_extract_javascript_class(self):
+        """Test extracting JavaScript class name."""
+        chunk = '''class UserController {
+    constructor(service) {
+        this.service = service;
+    }
+}
+'''
+        result = extract_scope_from_chunk(chunk, Language.JS)
+        assert result["class_name"] == "UserController"
+        assert "class_name" in result
+
+    def test_extract_go_function(self):
+        """Test extracting Go function name."""
+        chunk = '''func ProcessOrder(ctx context.Context, order *Order) error {
+    if err := validate(order); err != nil {
+        return err
+    }
+    return nil
+}
+'''
+        result = extract_scope_from_chunk(chunk, Language.GO)
+        assert result["function_name"] == "ProcessOrder"
+        assert result["scope"] == "ProcessOrder"
+
+    def test_extract_go_method(self):
+        """Test extracting Go method with receiver."""
+        chunk = '''func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
+    // Handle the request
+}
+'''
+        result = extract_scope_from_chunk(chunk, Language.GO)
+        assert result["function_name"] == "handleRequest"
+
+    def test_extract_rust_function(self):
+        """Test extracting Rust function name."""
+        chunk = '''pub async fn connect_database(config: &Config) -> Result<Pool, Error> {
+    Pool::connect(&config.database_url).await
+}
+'''
+        result = extract_scope_from_chunk(chunk, Language.RUST)
+        assert result["function_name"] == "connect_database"
+
+    def test_extract_no_scope_from_plain_text(self):
+        """Test that plain text returns no scope."""
+        chunk = "This is just a comment or documentation text."
+        result = extract_scope_from_chunk(chunk, Language.PYTHON)
+        assert result["function_name"] is None
+        assert result["class_name"] is None
+        assert result["scope"] is None
+
+    def test_extract_none_language(self):
+        """Test that None language returns empty result."""
+        chunk = "def foo(): pass"
+        result = extract_scope_from_chunk(chunk, None)
+        assert result["function_name"] is None
+        assert result["class_name"] is None
+        assert result["scope"] is None
+
+    def test_extract_innermost_function(self):
+        """Test that the innermost function is extracted."""
+        chunk = '''def outer():
+    def inner():
+        return "inner"
+    return inner()
+'''
+        result = extract_scope_from_chunk(chunk, Language.PYTHON)
+        # Should get the innermost (last) function
+        assert result["function_name"] == "inner"
 
 
 class TestIngestion:

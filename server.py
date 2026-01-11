@@ -482,7 +482,7 @@ def save_note_to_cortex(
             metadatas=[{
                 "type": "note",
                 "title": title or "",
-                "tags": ",".join(tags) if tags else "",
+                "tags": json.dumps(tags) if tags else "[]",
                 "project": project or "global",
                 "branch": branch,
                 "created_at": timestamp,
