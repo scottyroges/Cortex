@@ -45,6 +45,12 @@ A local, privacy-first "Second Brain" for Claude Code. Acts as an **Episodic & L
 | Shell Aliases | `memsave`, `memsearch` bypass LLM | ⬜ |
 | In-Chat Macros | `>> search auth` direct tool call | ⬜ |
 
+### Claude Integration
+
+| Feature | Description | Status |
+|---------|-------------|--------|
+| Custom `CLAUDE.md` | Guide Claude on Cortex usage - when to search, commit, save notes | ⬜ |
+
 ### Domain-Specific Memories
 
 | Feature | Description | Status |
