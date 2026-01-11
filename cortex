@@ -509,9 +509,72 @@ run_stdio_legacy() {
         "$IMAGE_NAME" stdio
 }
 
+# --- Help Command ---
+
+show_help() {
+    cat <<'EOF'
+Cortex - AI-powered codebase memory for Claude Code
+
+USAGE:
+    cortex [COMMAND]
+
+COMMANDS:
+    (default)           Start MCP bridge (auto-starts daemon if needed)
+    init                Interactive setup, creates ~/.cortex/settings.json
+    config              Show current configuration
+    config edit         Open settings.json in $EDITOR
+    daemon start        Start the daemon container
+    daemon stop         Stop the daemon container
+    daemon restart      Restart the daemon (rebuilds image)
+    daemon status       Check daemon status and build info
+    daemon logs         View daemon logs (follows output)
+    daemon rebuild      Stop, rebuild image, and restart daemon
+    stop                Shortcut for 'daemon stop'
+    logs                Shortcut for 'daemon logs'
+    rebuild             Shortcut for 'daemon rebuild'
+    stdio               Run in legacy stdio mode (no daemon)
+    help, --help, -h    Show this help message
+
+CONFIGURATION:
+    Settings are stored in ~/.cortex/settings.json
+    Run 'cortex init' to create this file interactively.
+
+    Settings file options:
+      code_paths        Array of directories to mount (e.g., ["~/Projects"])
+      header_provider   "none", "claude-cli", or "anthropic"
+      debug             true or false
+
+ENVIRONMENT VARIABLES (override settings.json):
+    CORTEX_CODE_PATHS       Comma-separated list of code directories
+    CORTEX_DATA_PATH        Where to store Cortex data (default: ~/.cortex)
+    CORTEX_HEADER_PROVIDER  Header provider: "anthropic", "claude-cli", or "none"
+    CORTEX_DEBUG            Enable debug logging (true/false)
+    CORTEX_DAEMON_PORT      Daemon port (default: 8000)
+    ANTHROPIC_API_KEY       Required for header_provider="anthropic"
+
+QUICK START:
+    1. Run 'cortex init' to configure your code paths
+    2. Add to Claude Code: claude mcp add cortex cortex
+    3. Restart Claude Code to load the MCP server
+
+EXAMPLES:
+    cortex init                 # First-time setup
+    cortex                      # Start MCP server (normal usage)
+    cortex daemon status        # Check if daemon is healthy
+    cortex daemon logs          # Debug issues
+    cortex config edit          # Modify settings
+    cortex daemon restart       # Apply config changes
+
+For more information, see: https://github.com/anthropics/cortex
+EOF
+}
+
 # --- Main Command Handling ---
 
 case "${1:-}" in
+    help|--help|-h)
+        show_help
+        ;;
     daemon)
         case "${2:-status}" in
             start)
