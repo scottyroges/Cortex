@@ -51,6 +51,12 @@ A local, privacy-first "Second Brain" for Claude Code. Acts as an **Episodic & L
 |---------|-------------|--------|
 | Custom `CLAUDE.md` | Guide Claude on Cortex usage - when to search, commit, save notes | ⬜ |
 
+### Performance & UX
+
+| Feature | Description | Status |
+|---------|-------------|--------|
+| Async Long-Running Tasks | Make `commit_to_cortex` and `ingest_code_into_cortex` async - return success immediately, process in background | ⬜ |
+
 ### Domain-Specific Memories
 
 | Feature | Description | Status |
