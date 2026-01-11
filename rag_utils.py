@@ -185,12 +185,27 @@ def detect_language(file_path: str, content: Optional[str] = None) -> Optional[L
 
 # --- ChromaDB Initialization ---
 
-DB_PATH = os.environ.get("CORTEX_DB_PATH", "/app/cortex_db")
+
+def get_default_db_path() -> str:
+    """Get the default database path, expanding ~ to home directory."""
+    env_path = os.environ.get("CORTEX_DB_PATH")
+    if env_path:
+        return os.path.expanduser(env_path)
+    # Default: ~/.cortex/db (or /app/cortex_db in Docker)
+    if os.path.exists("/app") and os.access("/app", os.W_OK):
+        return "/app/cortex_db"
+    return os.path.expanduser("~/.cortex/db")
+
+
+DB_PATH = get_default_db_path()
 
 
 def get_chroma_client(persist_dir: Optional[str] = None) -> chromadb.PersistentClient:
     """Initialize persistent ChromaDB client."""
     path = persist_dir or DB_PATH
+    path = os.path.expanduser(path)
+    # Ensure directory exists
+    os.makedirs(path, exist_ok=True)
     return chromadb.PersistentClient(
         path=path,
         settings=Settings(anonymized_telemetry=False),

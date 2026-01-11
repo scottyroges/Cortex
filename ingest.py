@@ -21,13 +21,22 @@ from langchain_text_splitters import Language, RecursiveCharacterTextSplitter
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from logging_config import get_logger
-from rag_utils import detect_language, get_current_branch, scrub_secrets
+from rag_utils import DB_PATH, detect_language, get_current_branch, scrub_secrets
 
 logger = get_logger("ingest")
 
 # --- Configuration ---
 
-STATE_FILE = os.environ.get("CORTEX_STATE_FILE", "/app/cortex_db/ingest_state.json")
+
+def get_default_state_file() -> str:
+    """Get the default state file path."""
+    env_path = os.environ.get("CORTEX_STATE_FILE")
+    if env_path:
+        return os.path.expanduser(env_path)
+    return os.path.join(DB_PATH, "ingest_state.json")
+
+
+STATE_FILE = get_default_state_file()
 
 DEFAULT_IGNORE_PATTERNS = {
     # Version control

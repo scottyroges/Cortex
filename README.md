@@ -23,11 +23,13 @@ docker build -t cortex .
 
 ```bash
 docker run -i --rm \
-  -v ~/cortex_db:/app/cortex_db \
+  -v ~/.cortex:/root/.cortex \
   -v ~/MyProject:/projects \
   -e ANTHROPIC_API_KEY=sk-ant-... \
   cortex
 ```
+
+**Note:** Data is stored in `~/.cortex/db` by default. Override with `CORTEX_DB_PATH` env var.
 
 ### Configure Claude Code
 
@@ -40,7 +42,7 @@ Add to `~/.claude/settings.json`:
       "command": "docker",
       "args": [
         "run", "-i", "--rm",
-        "-v", "/path/to/cortex_db:/app/cortex_db",
+        "-v", "~/.cortex:/root/.cortex",
         "-v", "/path/to/code:/projects",
         "-e", "ANTHROPIC_API_KEY=sk-ant-...",
         "cortex"
@@ -107,15 +109,15 @@ Enable debug logging to see detailed search/ingestion pipeline info:
 
 ```bash
 docker run -i --rm \
-  -v ~/cortex_db:/app/cortex_db \
+  -v ~/.cortex:/root/.cortex \
   -v ~/MyProject:/projects \
   -e ANTHROPIC_API_KEY=sk-ant-... \
   -e CORTEX_DEBUG=true \
-  -e CORTEX_LOG_FILE=/app/cortex_db/debug.log \
+  -e CORTEX_LOG_FILE=/root/.cortex/debug.log \
   cortex
 
 # Tail the log in another terminal
-tail -f ~/cortex_db/debug.log
+tail -f ~/.cortex/debug.log
 ```
 
 ### HTTP Debug Server
@@ -125,7 +127,7 @@ Enable the optional HTTP server for database inspection:
 ```bash
 docker run -i --rm \
   -p 8080:8080 \
-  -v ~/cortex_db:/app/cortex_db \
+  -v ~/.cortex:/root/.cortex \
   -v ~/MyProject:/projects \
   -e ANTHROPIC_API_KEY=sk-ant-... \
   -e CORTEX_HTTP=true \
