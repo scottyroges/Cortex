@@ -40,7 +40,8 @@ class TestSecretScrubbing:
 
     def test_stripe_key_scrubbed(self):
         """Test Stripe secret key is redacted."""
-        text = "STRIPE_KEY = sk_test_TESTKEY1234567890abcdef"
+        # Key must be 24+ chars after sk_test_ to match pattern
+        text = "STRIPE_KEY = sk_test_TESTKEY1234567890abcdefgh"
         result = scrub_secrets(text)
         assert "sk_test_" not in result
         assert "[STRIPE_SECRET_REDACTED]" in result
@@ -87,7 +88,8 @@ class TestGitDetection:
         """Test detection of git repository."""
         branch, is_git, root = get_git_info(str(temp_git_repo))
         assert is_git is True
-        assert root == str(temp_git_repo)
+        # Resolve both paths to handle macOS /var -> /private/var symlink
+        assert Path(root).resolve() == temp_git_repo.resolve()
         # Branch should be main or master (depends on git config)
         assert branch in ["main", "master"]
 

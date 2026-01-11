@@ -226,6 +226,33 @@ def get_or_create_collection(
 # --- BM25 Index ---
 
 
+def tokenize_code(text: str) -> list[str]:
+    """
+    Tokenize text for BM25, respecting code naming conventions.
+
+    - Splits camelCase: "calculateTotal" → ["calculate", "total"]
+    - Splits snake_case: "calculate_total" → ["calculate", "total"]
+    - Splits on whitespace and punctuation
+    - Lowercases all tokens
+    - Filters empty tokens
+    """
+    # First split on whitespace and common punctuation
+    # Then split camelCase boundaries (lowercase followed by uppercase)
+    # Then split on underscores
+    tokens = []
+    # Split on whitespace and punctuation first
+    words = re.split(r'[\s\.\,\;\:\(\)\[\]\{\}\"\'\`\#\@\!\?\<\>\=\+\-\*\/\\\|\&\^]+', text)
+    for word in words:
+        if not word:
+            continue
+        # Split camelCase: insert split before uppercase letters that follow lowercase
+        camel_split = re.sub(r'([a-z])([A-Z])', r'\1_\2', word)
+        # Now split on underscores
+        sub_tokens = camel_split.lower().split('_')
+        tokens.extend(t for t in sub_tokens if t)
+    return tokens
+
+
 class BM25Index:
     """BM25 keyword index for hybrid search."""
 
@@ -263,8 +290,8 @@ class BM25Index:
             )
         ]
 
-        # Tokenize for BM25
-        tokenized = [doc.lower().split() for doc in results["documents"]]
+        # Tokenize for BM25 (using code-aware tokenizer)
+        tokenized = [tokenize_code(doc) for doc in results["documents"]]
         self.index = BM25Okapi(tokenized)
         elapsed = time.time() - start_time
         logger.debug(f"BM25 index built: {len(self.documents)} docs in {elapsed*1000:.1f}ms")
@@ -274,7 +301,7 @@ class BM25Index:
         if not self.index or not self.documents:
             return []
 
-        tokens = query.lower().split()
+        tokens = tokenize_code(query)
         scores = self.index.get_scores(tokens)
 
         # Pair documents with scores and sort
@@ -399,7 +426,8 @@ class HybridSearcher:
         fused = reciprocal_rank_fusion(formatted_vector, bm25_results)
         logger.debug(f"RRF fusion: {len(fused)} unique docs")
 
-        return fused
+        # Limit to top_k results
+        return fused[:top_k]
 
 
 # --- FlashRank Reranker ---

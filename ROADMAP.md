@@ -229,16 +229,16 @@ Considered re-tagging existing documents after branch merge (update `branch: "fe
 
 If historical audit trail needed later, could change `branch` → `branches: []` array.
 
-### Retrieval Quality Improvements ⬜
+### Retrieval Quality Improvements ✅
 
 **Problem**: Default settings and tokenization aren't optimized for code search.
 
-| Issue | Current | Recommended |
-|-------|---------|-------------|
-| `min_score` default | 0.3 (too permissive) | 0.5 (stricter) |
-| Dead `scope` parameter | Unused in `search_cortex` | Remove it |
-| BM25 tokenization | Naive `.split()` | Respect camelCase, snake_case |
-| FlashRank model | MS MARCO (web search) | Consider code-optimized model |
+| Issue | Current | Recommended | Status |
+|-------|---------|-------------|--------|
+| `min_score` default | 0.3 (too permissive) | 0.5 (stricter) | ✅ |
+| Dead `scope` parameter | Unused in `search_cortex` | Remove it | ✅ |
+| BM25 tokenization | Naive `.split()` | Respect camelCase, snake_case | ✅ |
+| FlashRank model | MS MARCO (web search) | Consider code-optimized model | ⬜ |
 
 **Fix Required** (`server.py`, `rag_utils.py`):
 

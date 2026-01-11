@@ -95,7 +95,7 @@ def get_default_header_provider() -> str:
 
 
 CONFIG = {
-    "min_score": 0.3,
+    "min_score": 0.5,
     "verbose": False,
     "enabled": True,
     "top_k_retrieve": 50,
@@ -111,7 +111,6 @@ CONFIG = {
 @mcp.tool()
 def search_cortex(
     query: str,
-    scope: str = "global",
     project: Optional[str] = None,
     min_score: Optional[float] = None,
 ) -> str:
@@ -120,7 +119,6 @@ def search_cortex(
 
     Args:
         query: Natural language search query
-        scope: Search scope (default: "global")
         project: Optional project filter
         min_score: Minimum relevance score threshold (0-1, overrides config)
 
@@ -131,7 +129,7 @@ def search_cortex(
         logger.info("Search rejected: Cortex is disabled")
         return json.dumps({"error": "Cortex is disabled", "results": []})
 
-    logger.info(f"Search query: '{query}' (scope={scope}, project={project})")
+    logger.info(f"Search query: '{query}' (project={project})")
     start_time = time.time()
 
     try:
