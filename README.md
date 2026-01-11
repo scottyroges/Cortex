@@ -32,7 +32,14 @@ ln -sf "$(pwd)/cortex" ~/.local/bin/cortex
 
 ### Configure Claude Code
 
-Add to `~/.claude/settings.json`:
+**Option 1: CLI (recommended)**
+```bash
+claude mcp add -s user -e CORTEX_CODE_PATHS=~/Projects,~/Work -- cortex cortex
+```
+
+**Option 2: Manual config**
+
+Add to `~/.claude.json`:
 
 ```json
 {
@@ -47,7 +54,7 @@ Add to `~/.claude/settings.json`:
 }
 ```
 
-That's it! The wrapper handles Docker mounting automatically.
+Then restart Claude Code. The wrapper handles Docker mounting automatically.
 
 ## MCP Tools
 
@@ -103,7 +110,7 @@ Set these in your MCP config's `env` block:
 | `CORTEX_HTTP_PORT` | `8080` | HTTP server port |
 | `ANTHROPIC_API_KEY` | - | Required for `header_provider=anthropic` |
 
-**Example with all options:**
+**Example with all options** (in `~/.claude.json`):
 ```json
 {
   "mcpServers": {
