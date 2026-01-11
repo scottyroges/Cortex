@@ -85,6 +85,15 @@ def get_anthropic():
 
 # --- Runtime Configuration ---
 
+
+def get_default_header_provider() -> str:
+    """Get header provider from env var or default to 'none'."""
+    provider = os.environ.get("CORTEX_HEADER_PROVIDER", "none").lower()
+    if provider in ("anthropic", "claude-cli", "none"):
+        return provider
+    return "none"
+
+
 CONFIG = {
     "min_score": 0.3,
     "verbose": False,
@@ -92,7 +101,7 @@ CONFIG = {
     "top_k_retrieve": 50,
     "top_k_rerank": 5,
     # Header provider: "anthropic" (API), "claude-cli", or "none"
-    "header_provider": "none",
+    "header_provider": get_default_header_provider(),
 }
 
 

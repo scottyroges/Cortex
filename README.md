@@ -111,7 +111,25 @@ Contextual headers add AI-generated summaries to each code chunk during ingestio
 | `"claude-cli"` | Use Claude CLI (`claude -p`) - uses your existing Claude auth |
 | `"anthropic"` | Use Anthropic API directly - requires `ANTHROPIC_API_KEY` |
 
-Configure via MCP tool:
+Set via environment variable in your MCP config:
+```json
+{
+  "mcpServers": {
+    "cortex": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "-v", "~/.cortex:/root/.cortex",
+        "-v", "/path/to/code:/projects",
+        "-e", "CORTEX_HEADER_PROVIDER=claude-cli",
+        "cortex"
+      ]
+    }
+  }
+}
+```
+
+Or configure at runtime via MCP tool:
 ```
 configure_cortex(header_provider="claude-cli")
 ```
