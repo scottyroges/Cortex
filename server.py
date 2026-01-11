@@ -91,7 +91,8 @@ CONFIG = {
     "enabled": True,
     "top_k_retrieve": 50,
     "top_k_rerank": 5,
-    "use_haiku": True,
+    # Header provider: "anthropic" (API), "claude-cli", or "none"
+    "header_provider": "none",
 }
 
 
@@ -235,7 +236,7 @@ def ingest_code_into_cortex(
 
     try:
         collection = get_collection()
-        anthropic = get_anthropic() if CONFIG["use_haiku"] else None
+        anthropic = get_anthropic() if CONFIG["header_provider"] == "anthropic" else None
 
         stats = ingest_codebase(
             root_path=path,
@@ -243,7 +244,7 @@ def ingest_code_into_cortex(
             project_id=project_name,
             anthropic_client=anthropic,
             force_full=force_full,
-            use_haiku=CONFIG["use_haiku"],
+            header_provider=CONFIG["header_provider"],
         )
 
         # Rebuild search index after ingestion
@@ -292,7 +293,7 @@ def commit_to_cortex(
 
     try:
         collection = get_collection()
-        anthropic = get_anthropic() if CONFIG["use_haiku"] else None
+        anthropic = get_anthropic() if CONFIG["header_provider"] == "anthropic" else None
 
         # Save the summary as a note
         import uuid
@@ -319,7 +320,7 @@ def commit_to_cortex(
             collection=collection,
             project_id=project_id,
             anthropic_client=anthropic,
-            use_haiku=CONFIG["use_haiku"],
+            header_provider=CONFIG["header_provider"],
         )
         logger.debug(f"Re-indexed files: {reindex_stats}")
 
@@ -415,7 +416,7 @@ def configure_cortex(
     verbose: Optional[bool] = None,
     top_k_retrieve: Optional[int] = None,
     top_k_rerank: Optional[int] = None,
-    use_haiku: Optional[bool] = None,
+    header_provider: Optional[str] = None,
 ) -> str:
     """
     Configure Cortex runtime settings.
@@ -425,7 +426,7 @@ def configure_cortex(
         verbose: Enable verbose output with debug info
         top_k_retrieve: Number of candidates to retrieve before reranking
         top_k_rerank: Number of results to return after reranking
-        use_haiku: Use Claude Haiku for contextual headers during ingestion
+        header_provider: Provider for contextual headers: "anthropic", "claude-cli", or "none"
 
     Returns:
         JSON with updated configuration
@@ -447,9 +448,12 @@ def configure_cortex(
         CONFIG["top_k_rerank"] = max(1, min(50, top_k_rerank))
         changes.append(f"top_k_rerank={CONFIG['top_k_rerank']}")
 
-    if use_haiku is not None:
-        CONFIG["use_haiku"] = use_haiku
-        changes.append(f"use_haiku={use_haiku}")
+    if header_provider is not None:
+        if header_provider in ("anthropic", "claude-cli", "none"):
+            CONFIG["header_provider"] = header_provider
+            changes.append(f"header_provider={header_provider}")
+        else:
+            logger.warning(f"Invalid header_provider: {header_provider}. Use 'anthropic', 'claude-cli', or 'none'")
 
     if changes:
         logger.info(f"Configuration updated: {', '.join(changes)}")

@@ -99,7 +99,22 @@ Runtime settings via `configure_cortex`:
 | `verbose` | false | Include debug info in responses |
 | `top_k_retrieve` | 50 | Candidates before reranking |
 | `top_k_rerank` | 5 | Final results after reranking |
-| `use_haiku` | true | Generate contextual headers via Haiku |
+| `header_provider` | "none" | Contextual header provider (see below) |
+
+### Header Providers
+
+Contextual headers add AI-generated summaries to each code chunk during ingestion:
+
+| Provider | Description |
+|----------|-------------|
+| `"none"` | No headers (fastest, default) |
+| `"claude-cli"` | Use Claude CLI (`claude -p`) - uses your existing Claude auth |
+| `"anthropic"` | Use Anthropic API directly - requires `ANTHROPIC_API_KEY` |
+
+Configure via MCP tool:
+```
+configure_cortex(header_provider="claude-cli")
+```
 
 ## Debugging
 

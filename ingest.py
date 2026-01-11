@@ -262,30 +262,33 @@ def chunk_code_file(
 
 # --- Contextual Headers ---
 
+# Header provider options: "anthropic", "claude-cli", "none"
+HEADER_PROMPT_TEMPLATE = """Analyze this {language} code chunk from {file_path} and provide a brief (1-2 sentence) description of what it does. Focus on the purpose and key functionality.
+
+Code:
+```{language}
+{chunk}
+```
+
+Respond with only the description, no formatting or prefixes."""
+
 
 @retry(
     wait=wait_exponential(multiplier=1, min=1, max=60),
     stop=stop_after_attempt(3),
 )
-def generate_contextual_header(
+def generate_header_with_anthropic(
     chunk: str,
     file_path: str,
     language: str,
     anthropic_client: Anthropic,
 ) -> str:
-    """
-    Generate a contextual header using Claude Haiku.
-
-    Describes what the code chunk does in 1-2 sentences.
-    """
-    prompt = f"""Analyze this {language} code chunk from {file_path} and provide a brief (1-2 sentence) description of what it does. Focus on the purpose and key functionality.
-
-Code:
-```{language}
-{chunk[:2000]}
-```
-
-Respond with only the description, no formatting or prefixes."""
+    """Generate a contextual header using the Anthropic API (Haiku)."""
+    prompt = HEADER_PROMPT_TEMPLATE.format(
+        language=language,
+        file_path=file_path,
+        chunk=chunk[:2000],
+    )
 
     try:
         response = anthropic_client.messages.create(
@@ -295,7 +298,43 @@ Respond with only the description, no formatting or prefixes."""
         )
         return response.content[0].text.strip()
     except Exception as e:
-        # Fallback to basic header
+        logger.warning(f"Anthropic API error: {e}")
+        return f"Code snippet from {file_path}"
+
+
+def generate_header_with_claude_cli(
+    chunk: str,
+    file_path: str,
+    language: str,
+) -> str:
+    """Generate a contextual header using the Claude CLI."""
+    import subprocess
+
+    prompt = HEADER_PROMPT_TEMPLATE.format(
+        language=language,
+        file_path=file_path,
+        chunk=chunk[:2000],
+    )
+
+    try:
+        result = subprocess.run(
+            ["claude", "-p", prompt, "--model", "haiku"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+        logger.warning(f"Claude CLI error: {result.stderr}")
+        return f"Code snippet from {file_path}"
+    except FileNotFoundError:
+        logger.warning("Claude CLI not found. Install with: npm install -g @anthropic-ai/claude-cli")
+        return f"Code snippet from {file_path}"
+    except subprocess.TimeoutExpired:
+        logger.warning("Claude CLI timed out")
+        return f"Code snippet from {file_path}"
+    except Exception as e:
+        logger.warning(f"Claude CLI error: {e}")
         return f"Code snippet from {file_path}"
 
 
@@ -303,23 +342,25 @@ def generate_header_sync(
     chunk: str,
     file_path: str,
     language: Optional[Language],
-    anthropic_client: Optional[Anthropic],
-    use_haiku: bool = True,
+    anthropic_client: Optional[Anthropic] = None,
+    header_provider: str = "none",
 ) -> str:
     """
-    Generate header for a chunk, optionally using Haiku.
+    Generate header for a chunk using the specified provider.
 
     Args:
         chunk: The code chunk
         file_path: Path to the source file
         language: Detected language
-        anthropic_client: Anthropic client (optional)
-        use_haiku: Whether to use Haiku for header generation
+        anthropic_client: Anthropic client (for "anthropic" provider)
+        header_provider: One of "anthropic", "claude-cli", or "none"
     """
     lang_str = language.value if language else "text"
 
-    if use_haiku and anthropic_client:
-        return generate_contextual_header(chunk, file_path, lang_str, anthropic_client)
+    if header_provider == "anthropic" and anthropic_client:
+        return generate_header_with_anthropic(chunk, file_path, lang_str, anthropic_client)
+    elif header_provider == "claude-cli":
+        return generate_header_with_claude_cli(chunk, file_path, lang_str)
 
     # Simple fallback header
     return f"Code from {file_path}"
@@ -334,12 +375,22 @@ def ingest_file(
     project_id: str,
     branch: str,
     anthropic_client: Optional[Anthropic] = None,
-    use_haiku: bool = True,
+    header_provider: str = "none",
     chunk_size: int = 1500,
     chunk_overlap: int = 200,
 ) -> list[str]:
     """
     Ingest a single file into the collection.
+
+    Args:
+        file_path: Path to the file
+        collection: ChromaDB collection
+        project_id: Project identifier
+        branch: Git branch name
+        anthropic_client: Anthropic client (for "anthropic" header provider)
+        header_provider: One of "anthropic", "claude-cli", or "none"
+        chunk_size: Maximum chunk size
+        chunk_overlap: Overlap between chunks
 
     Returns list of document IDs created.
     """
@@ -375,7 +426,7 @@ def ingest_file(
             path_str,
             language,
             anthropic_client,
-            use_haiku=use_haiku,
+            header_provider=header_provider,
         )
 
         # Combine header with chunk
@@ -412,7 +463,7 @@ def ingest_codebase(
     project_id: Optional[str] = None,
     anthropic_client: Optional[Anthropic] = None,
     force_full: bool = False,
-    use_haiku: bool = True,
+    header_provider: str = "none",
     state_file: Optional[str] = None,
 ) -> dict[str, Any]:
     """
@@ -422,9 +473,9 @@ def ingest_codebase(
         root_path: Root directory to ingest
         collection: ChromaDB collection to add documents to
         project_id: Project identifier (defaults to directory name)
-        anthropic_client: Anthropic client for Haiku headers
+        anthropic_client: Anthropic client (for "anthropic" header provider)
         force_full: Force full re-ingestion (ignore delta sync)
-        use_haiku: Use Haiku for contextual headers
+        header_provider: One of "anthropic", "claude-cli", or "none"
         state_file: Path to state file for delta sync
 
     Returns:
@@ -469,7 +520,7 @@ def ingest_codebase(
                 project_id=project_id,
                 branch=branch,
                 anthropic_client=anthropic_client,
-                use_haiku=use_haiku,
+                header_provider=header_provider,
             )
 
             if doc_ids:
@@ -500,7 +551,7 @@ def ingest_files(
     collection: chromadb.Collection,
     project_id: str,
     anthropic_client: Optional[Anthropic] = None,
-    use_haiku: bool = True,
+    header_provider: str = "none",
 ) -> dict[str, Any]:
     """
     Ingest specific files into the collection.
@@ -534,7 +585,7 @@ def ingest_files(
                 project_id=project_id,
                 branch=branch,
                 anthropic_client=anthropic_client,
-                use_haiku=use_haiku,
+                header_provider=header_provider,
             )
 
             stats["files_processed"] += 1
