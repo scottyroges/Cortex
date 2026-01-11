@@ -509,6 +509,160 @@ run_stdio_legacy() {
         "$IMAGE_NAME" stdio
 }
 
+# --- CLI Commands (bypass LLM) ---
+
+cli_search() {
+    local query="$*"
+    if [ -z "$query" ]; then
+        echo "Usage: cortex search <query>" >&2
+        echo "Example: cortex search authentication flow" >&2
+        exit 1
+    fi
+
+    if ! is_daemon_running; then
+        echo "Error: Daemon is not running. Start with: cortex daemon start" >&2
+        exit 1
+    fi
+
+    # URL-encode the query
+    local encoded_query
+    encoded_query=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$query'))")
+
+    # Call the HTTP API
+    local response
+    response=$(curl -sf "http://localhost:${HTTP_PORT}/search?q=${encoded_query}&limit=5")
+
+    if [ $? -ne 0 ]; then
+        echo "Error: Search failed. Is the daemon running?" >&2
+        exit 1
+    fi
+
+    # Pretty-print results
+    echo "$response" | python3 -c "
+import json
+import sys
+
+try:
+    data = json.load(sys.stdin)
+    query = data.get('query', '')
+    results = data.get('results', [])
+    timing = data.get('timing_ms', 0)
+
+    print(f'Search: \"{query}\" ({len(results)} results, {timing}ms)')
+    print()
+
+    if not results:
+        print('No results found.')
+    else:
+        for i, r in enumerate(results, 1):
+            meta = r.get('metadata', {})
+            score = r.get('score', 0)
+            content = r.get('content', '')[:200]
+
+            # Format source
+            source = meta.get('file_path', meta.get('url', meta.get('project', 'unknown')))
+            doc_type = meta.get('type', 'unknown')
+
+            print(f'{i}. [{doc_type}] {source}')
+            print(f'   Score: {score:.3f}')
+            print(f'   {content}...')
+            print()
+except Exception as e:
+    print(f'Error parsing response: {e}', file=sys.stderr)
+    sys.exit(1)
+"
+}
+
+cli_save() {
+    # Parse options
+    local title=""
+    local project="notes"
+    local tags=""
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -t|--title)
+                title="$2"
+                shift 2
+                ;;
+            -p|--project)
+                project="$2"
+                shift 2
+                ;;
+            --tags)
+                tags="$2"
+                shift 2
+                ;;
+            --)
+                shift
+                break
+                ;;
+            -*)
+                echo "Unknown option: $1" >&2
+                echo "Usage: cortex save [-t title] [-p project] [--tags tag1,tag2] <content>" >&2
+                exit 1
+                ;;
+            *)
+                break
+                ;;
+        esac
+    done
+
+    local content="$*"
+    if [ -z "$content" ]; then
+        echo "Usage: cortex save [-t title] [-p project] [--tags tag1,tag2] <content>" >&2
+        echo "Example: cortex save -t 'Auth Decision' 'We chose JWT for auth because...'" >&2
+        exit 1
+    fi
+
+    if ! is_daemon_running; then
+        echo "Error: Daemon is not running. Start with: cortex daemon start" >&2
+        exit 1
+    fi
+
+    # Build JSON payload
+    local json_payload
+    json_payload=$(python3 -c "
+import json
+payload = {
+    'content': '''$content''',
+    'project': '$project'
+}
+if '$title':
+    payload['title'] = '$title'
+if '$tags':
+    payload['tags'] = '$tags'.split(',')
+print(json.dumps(payload))
+")
+
+    # Call the HTTP API
+    local response
+    response=$(curl -sf -X POST \
+        -H "Content-Type: application/json" \
+        -d "$json_payload" \
+        "http://localhost:${HTTP_PORT}/note")
+
+    if [ $? -ne 0 ]; then
+        echo "Error: Save failed. Is the daemon running?" >&2
+        exit 1
+    fi
+
+    # Show result
+    echo "$response" | python3 -c "
+import json
+import sys
+data = json.load(sys.stdin)
+if data.get('status') == 'success':
+    title = data.get('title', '(untitled)')
+    doc_id = data.get('id', 'unknown')
+    print(f'Saved: {title}')
+    print(f'ID: {doc_id}')
+else:
+    print('Save failed', file=sys.stderr)
+    sys.exit(1)
+"
+}
+
 # --- Help Command ---
 
 show_help() {
@@ -520,6 +674,9 @@ USAGE:
 
 COMMANDS:
     (default)           Start MCP bridge (auto-starts daemon if needed)
+    search <query>      Search memory directly (bypasses LLM)
+    save [opts] <text>  Save a note directly (bypasses LLM)
+                        Options: -t <title>, -p <project>, --tags <a,b>
     init                Interactive setup, creates ~/.cortex/settings.json
     config              Show current configuration
     config edit         Open settings.json in $EDITOR
@@ -560,6 +717,9 @@ QUICK START:
 EXAMPLES:
     cortex init                 # First-time setup
     cortex                      # Start MCP server (normal usage)
+    cortex search auth flow     # Quick search from terminal
+    cortex save "Use JWT"       # Save a quick note
+    cortex save -t "Decision" "We chose Redis for caching"
     cortex daemon status        # Check if daemon is healthy
     cortex daemon logs          # Debug issues
     cortex config edit          # Modify settings
@@ -638,6 +798,14 @@ case "${1:-}" in
         stop_daemon
         build_image
         start_daemon
+        ;;
+    search)
+        shift
+        cli_search "$@"
+        ;;
+    save)
+        shift
+        cli_save "$@"
         ;;
     *)
         # Default: run stdio bridge (auto-starts daemon if needed)

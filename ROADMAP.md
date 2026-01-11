@@ -35,14 +35,14 @@ A local, privacy-first "Second Brain" for Claude Code. Acts as an **Episodic & L
 
 | Feature | Description | Status |
 |---------|-------------|--------|
-| Shell Aliases | `memsave`, `memsearch` bypass LLM | ⬜ |
-| In-Chat Macros | `>> search auth` direct tool call | ⬜ |
+| Shell Aliases | `cortex search`, `cortex save` bypass LLM | ✅ |
+| In-Chat Macros | `cortex>> search auth` direct tool call | ✅ |
 
 ### Claude Integration
 
 | Feature | Description | Status |
 |---------|-------------|--------|
-| Custom `CLAUDE.md` | Guide Claude on Cortex usage - when to search, commit, save notes | ⬜ |
+| Custom `CLAUDE.md` | Guide Claude on Cortex usage - when to search, commit, save notes | ✅ |
 
 ### Initiative Management
 
