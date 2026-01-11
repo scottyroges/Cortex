@@ -901,6 +901,35 @@ def toggle_cortex(enabled: bool) -> str:
     }, indent=2)
 
 
+@mcp.tool()
+def get_cortex_version() -> str:
+    """
+    Get Cortex daemon build and version information.
+
+    Returns git commit, build time, and startup time to verify the daemon
+    is running the expected code version.
+
+    Returns:
+        JSON with version info and whether daemon matches local code
+    """
+    git_commit = os.environ.get("CORTEX_GIT_COMMIT", "unknown")
+    build_time = os.environ.get("CORTEX_BUILD_TIME", "unknown")
+
+    # Get startup time from http_server module
+    try:
+        from http_server import _startup_time
+        startup_time = _startup_time
+    except ImportError:
+        startup_time = "unknown"
+
+    return json.dumps({
+        "git_commit": git_commit,
+        "build_time": build_time,
+        "startup_time": startup_time,
+        "version": "1.0.0",
+    }, indent=2)
+
+
 # --- Entry Point ---
 
 

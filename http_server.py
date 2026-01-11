@@ -502,6 +502,7 @@ def _get_tool_map():
         configure_cortex,
         toggle_cortex,
         get_skeleton,
+        get_cortex_version,
     )
     return {
         "search_cortex": search_cortex,
@@ -511,6 +512,7 @@ def _get_tool_map():
         "configure_cortex": configure_cortex,
         "toggle_cortex": toggle_cortex,
         "get_skeleton": get_skeleton,
+        "get_cortex_version": get_cortex_version,
     }
 
 
@@ -603,6 +605,14 @@ MCP_TOOL_SCHEMAS = [
             "properties": {
                 "project": {"type": "string", "description": "Project name"},
             },
+        },
+    },
+    {
+        "name": "get_cortex_version",
+        "description": "Get Cortex daemon build and version information to verify the daemon is running expected code.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
         },
     },
 ]
