@@ -13,7 +13,7 @@ from logging_config import get_logger
 from src.git import get_current_branch
 from src.ingest import ingest_files
 from src.security import scrub_secrets
-from src.tools.services import CONFIG, get_anthropic, get_collection, get_searcher
+from src.tools.services import CONFIG, get_anthropic, get_collection, get_repo_path, get_searcher
 
 logger = get_logger("tools.notes")
 
@@ -41,7 +41,8 @@ def save_note_to_cortex(
     try:
         collection = get_collection()
         note_id = f"note:{uuid.uuid4().hex[:8]}"
-        branch = get_current_branch("/projects")
+        repo_path = get_repo_path()
+        branch = get_current_branch(repo_path) if repo_path else "unknown"
         timestamp = datetime.now(timezone.utc).isoformat()
 
         # Build document text
@@ -110,7 +111,8 @@ def commit_to_cortex(
         # Save the summary as a note
         note_id = f"commit:{uuid.uuid4().hex[:8]}"
 
-        branch = get_current_branch("/projects")
+        repo_path = get_repo_path()
+        branch = get_current_branch(repo_path) if repo_path else "unknown"
         project_id = project or "global"
         timestamp = datetime.now(timezone.utc).isoformat()
 

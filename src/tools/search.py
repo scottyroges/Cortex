@@ -11,15 +11,57 @@ from typing import Optional
 from logging_config import get_logger
 from src.git import get_current_branch
 from src.search import apply_recency_boost
-from src.tools.services import CONFIG, get_collection, get_reranker, get_searcher
+from src.tools.services import CONFIG, get_collection, get_reranker, get_repo_path, get_searcher
 
 logger = get_logger("tools.search")
+
+
+def build_branch_aware_filter(
+    project: Optional[str] = None,
+    branches: Optional[list[str]] = None,
+) -> Optional[dict]:
+    """
+    Build ChromaDB where filter that applies branch filtering
+    only to code and skeleton documents.
+
+    Notes, commits, tech_stack, initiatives are never filtered by branch.
+
+    Args:
+        project: Optional project filter
+        branches: List of branches to include for code/skeleton
+
+    Returns:
+        ChromaDB where filter dict, or None if no filtering needed
+    """
+    if not branches or branches == ["unknown"]:
+        # No branch filtering if unknown
+        return {"project": project} if project else None
+
+    # Types filtered by branch: code, skeleton
+    # Types NOT filtered: note, commit, tech_stack, initiative
+    branch_filter = {
+        "$or": [
+            # Code/skeleton: filter by branch
+            {"$and": [
+                {"type": {"$in": ["code", "skeleton"]}},
+                {"branch": {"$in": branches}}
+            ]},
+            # Non-code types: always include (cross-branch)
+            {"type": {"$in": ["note", "commit", "tech_stack", "initiative"]}}
+        ]
+    }
+
+    if project:
+        return {"$and": [{"project": project}, branch_filter]}
+
+    return branch_filter
 
 
 def search_cortex(
     query: str,
     project: Optional[str] = None,
     min_score: Optional[float] = None,
+    branch: Optional[str] = None,
 ) -> str:
     """
     Search the Cortex memory for relevant code, documentation, or notes.
@@ -28,6 +70,8 @@ def search_cortex(
         query: Natural language search query
         project: Optional project filter
         min_score: Minimum relevance score threshold (0-1, overrides config)
+        branch: Optional branch filter. Defaults to auto-detect from cwd.
+                Code/skeleton are filtered by branch; notes/commits are not.
 
     Returns:
         JSON with search results including content, file paths, and scores
@@ -36,7 +80,7 @@ def search_cortex(
         logger.info("Search rejected: Cortex is disabled")
         return json.dumps({"error": "Cortex is disabled", "results": []})
 
-    logger.info(f"Search query: '{query}' (project={project})")
+    logger.info(f"Search query: '{query}' (project={project}, branch={branch})")
     start_time = time.time()
 
     try:
@@ -44,12 +88,24 @@ def search_cortex(
         searcher = get_searcher()
         reranker = get_reranker()
 
-        # Build filter for branch awareness
-        current_branch = get_current_branch("/projects")
-        where_filter = None
+        # Determine branch context
+        repo_path = get_repo_path()
+        current_branch = get_current_branch(repo_path) if repo_path else "unknown"
 
-        if project:
-            where_filter = {"project": project}
+        # Use explicit branch if provided, otherwise auto-detect
+        effective_branch = branch if branch else current_branch
+
+        # Build branch list: current + main (unless already on main/master)
+        branches = [effective_branch]
+        if effective_branch not in ("main", "master", "unknown"):
+            branches.append("main")
+
+        # Build smart where filter (code filters by branch, notes don't)
+        where_filter = build_branch_aware_filter(
+            project=project,
+            branches=branches,
+        )
+        logger.debug(f"Branch filter: effective={effective_branch}, branches={branches}")
 
         # Hybrid search
         search_start = time.time()
@@ -124,10 +180,21 @@ def search_cortex(
 
         if detected_project and detected_project != "unknown":
             try:
+                # Try to get skeleton for current branch first
                 skeleton_results = collection.get(
-                    where={"$and": [{"type": "skeleton"}, {"project": detected_project}]},
+                    where={"$and": [
+                        {"type": "skeleton"},
+                        {"project": detected_project},
+                        {"branch": {"$in": branches}},
+                    ]},
                     include=["documents", "metadatas"],
                 )
+                # Fallback to any skeleton for this project if branch-specific not found
+                if not skeleton_results["documents"]:
+                    skeleton_results = collection.get(
+                        where={"$and": [{"type": "skeleton"}, {"project": detected_project}]},
+                        include=["documents", "metadatas"],
+                    )
                 if skeleton_results["documents"]:
                     skel_meta = skeleton_results["metadatas"][0]
                     skeleton_data = {
@@ -137,7 +204,7 @@ def search_cortex(
                         "total_dirs": skel_meta.get("total_dirs", 0),
                         "tree": skeleton_results["documents"][0],
                     }
-                    logger.debug(f"Skeleton included: {skel_meta.get('total_files', 0)} files")
+                    logger.debug(f"Skeleton included: {skel_meta.get('total_files', 0)} files (branch={skel_meta.get('branch')})")
             except Exception as e:
                 logger.debug(f"Skeleton fetch failed: {e}")
 

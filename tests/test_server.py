@@ -827,3 +827,303 @@ def validate_input(value):
                 break
 
         assert found, "Note should be found in search"
+
+
+class TestBranchAwareFilter:
+    """Tests for build_branch_aware_filter function."""
+
+    def test_filter_with_project_and_branches(self):
+        """Test filter construction with project and branch list."""
+        from src.tools.search import build_branch_aware_filter
+
+        result = build_branch_aware_filter(project="myproject", branches=["feature-x", "main"])
+
+        assert result is not None
+        assert "$and" in result
+        # Should have project filter and branch filter combined
+        assert {"project": "myproject"} in result["$and"]
+
+        # Find the $or clause
+        or_clause = None
+        for item in result["$and"]:
+            if "$or" in item:
+                or_clause = item["$or"]
+                break
+
+        assert or_clause is not None
+        # Should have code/skeleton filtered by branch
+        assert any("type" in c.get("$and", [{}])[0] for c in or_clause if "$and" in c)
+        # Should have non-code types always included
+        assert any(c.get("type", {}).get("$in") == ["note", "commit", "tech_stack", "initiative"] for c in or_clause)
+
+    def test_filter_with_unknown_branch(self):
+        """Test that unknown branch returns simple project filter."""
+        from src.tools.search import build_branch_aware_filter
+
+        result = build_branch_aware_filter(project="myproject", branches=["unknown"])
+
+        # Should fall back to simple project filter
+        assert result == {"project": "myproject"}
+
+    def test_filter_with_no_branches(self):
+        """Test that empty branches returns simple project filter."""
+        from src.tools.search import build_branch_aware_filter
+
+        result = build_branch_aware_filter(project="myproject", branches=None)
+        assert result == {"project": "myproject"}
+
+        result = build_branch_aware_filter(project="myproject", branches=[])
+        assert result == {"project": "myproject"}
+
+    def test_filter_without_project(self):
+        """Test filter with branches but no project."""
+        from src.tools.search import build_branch_aware_filter
+
+        result = build_branch_aware_filter(project=None, branches=["main"])
+
+        assert result is not None
+        assert "$or" in result
+        # Should only have branch filter, no project
+        assert "$and" not in result or not any(
+            "project" in item for item in result.get("$and", [])
+        )
+
+    def test_filter_returns_none_when_no_filters(self):
+        """Test that no project and unknown branch returns None."""
+        from src.tools.search import build_branch_aware_filter
+
+        result = build_branch_aware_filter(project=None, branches=["unknown"])
+        assert result is None
+
+        result = build_branch_aware_filter(project=None, branches=None)
+        assert result is None
+
+    def test_filter_code_types_filtered_by_branch(self):
+        """Test that code and skeleton types are in the branch-filtered clause."""
+        from src.tools.search import build_branch_aware_filter
+
+        result = build_branch_aware_filter(project=None, branches=["feature", "main"])
+
+        # Find the branch-filtered clause
+        or_clauses = result["$or"]
+        branch_filtered = None
+        for clause in or_clauses:
+            if "$and" in clause:
+                for sub in clause["$and"]:
+                    if "type" in sub and sub["type"].get("$in") == ["code", "skeleton"]:
+                        branch_filtered = clause
+                        break
+
+        assert branch_filtered is not None
+        # Should filter by branches
+        branch_clause = None
+        for sub in branch_filtered["$and"]:
+            if "branch" in sub:
+                branch_clause = sub
+                break
+        assert branch_clause is not None
+        assert branch_clause["branch"]["$in"] == ["feature", "main"]
+
+    def test_filter_non_code_types_not_filtered(self):
+        """Test that note, commit, tech_stack, initiative are not branch-filtered."""
+        from src.tools.search import build_branch_aware_filter
+
+        result = build_branch_aware_filter(project=None, branches=["feature", "main"])
+
+        # Find the non-filtered clause
+        or_clauses = result["$or"]
+        non_filtered = None
+        for clause in or_clauses:
+            if "type" in clause and "$in" in clause["type"]:
+                if "note" in clause["type"]["$in"]:
+                    non_filtered = clause
+                    break
+
+        assert non_filtered is not None
+        assert non_filtered["type"]["$in"] == ["note", "commit", "tech_stack", "initiative"]
+        # Should NOT have branch filter
+        assert "branch" not in non_filtered
+        assert "$and" not in non_filtered
+
+
+class TestGetRepoPath:
+    """Tests for get_repo_path helper function."""
+
+    def test_returns_path_in_git_repo(self, temp_git_repo: Path):
+        """Test that get_repo_path returns cwd when in a git repo."""
+        from src.tools.services import get_repo_path
+
+        # Mock os.getcwd to return our temp git repo
+        with patch("src.tools.services.os.getcwd", return_value=str(temp_git_repo)):
+            result = get_repo_path()
+
+        assert result == str(temp_git_repo)
+
+    def test_returns_none_in_non_git_dir(self, temp_dir: Path):
+        """Test that get_repo_path returns None when not in a git repo."""
+        from src.tools.services import get_repo_path
+
+        # Mock os.getcwd to return our non-git temp dir
+        with patch("src.tools.services.os.getcwd", return_value=str(temp_dir)):
+            result = get_repo_path()
+
+        assert result is None
+
+
+class TestBranchAwareSearch:
+    """Integration tests for branch-aware search filtering."""
+
+    def test_code_filtered_by_branch(self, temp_chroma_client):
+        """Test that code chunks are filtered by branch."""
+        from src.search import HybridSearcher
+        from src.storage import get_or_create_collection
+        from src.tools.search import build_branch_aware_filter
+
+        collection = get_or_create_collection(temp_chroma_client, "branch_test")
+
+        # Add code on different branches
+        collection.add(
+            documents=[
+                "function processOrder() { return 'feature branch implementation'; }",
+                "function processOrder() { return 'main branch implementation'; }",
+                "function helperUtil() { return 'main only'; }",
+            ],
+            ids=["code-feature-1", "code-main-1", "code-main-2"],
+            metadatas=[
+                {"type": "code", "file_path": "/src/order.js", "project": "test", "branch": "feature-x", "language": "javascript"},
+                {"type": "code", "file_path": "/src/order.js", "project": "test", "branch": "main", "language": "javascript"},
+                {"type": "code", "file_path": "/src/utils.js", "project": "test", "branch": "main", "language": "javascript"},
+            ],
+        )
+
+        # Search with branch filter for "feature-x" branch (should include feature-x + main)
+        where_filter = build_branch_aware_filter(project="test", branches=["feature-x", "main"])
+        searcher = HybridSearcher(collection)
+        searcher.build_index(where_filter)
+
+        results = searcher.search("processOrder", top_k=10, where_filter=where_filter)
+
+        # Should find both feature and main branch code
+        branches_found = {r["meta"]["branch"] for r in results}
+        assert "feature-x" in branches_found or "main" in branches_found
+
+    def test_notes_not_filtered_by_branch(self, temp_chroma_client):
+        """Test that notes are visible from any branch."""
+        from src.search import HybridSearcher
+        from src.storage import get_or_create_collection
+        from src.tools.search import build_branch_aware_filter
+
+        collection = get_or_create_collection(temp_chroma_client, "notes_branch_test")
+
+        # Add a note on main branch
+        collection.add(
+            documents=[
+                "Architecture Decision: Use PostgreSQL for the database layer",
+            ],
+            ids=["note-1"],
+            metadatas=[
+                {"type": "note", "project": "test", "branch": "main", "title": "DB Choice", "tags": "[]"},
+            ],
+        )
+
+        # Search from a different branch - note should still be visible
+        where_filter = build_branch_aware_filter(project="test", branches=["feature-x", "main"])
+        searcher = HybridSearcher(collection)
+        searcher.build_index(where_filter)
+
+        results = searcher.search("PostgreSQL database", top_k=10, where_filter=where_filter)
+
+        # Note should be found even though we're on feature-x
+        assert len(results) > 0
+        assert any(r["meta"]["type"] == "note" for r in results)
+
+    def test_commits_not_filtered_by_branch(self, temp_chroma_client):
+        """Test that commits are visible from any branch."""
+        from src.search import HybridSearcher
+        from src.storage import get_or_create_collection
+        from src.tools.search import build_branch_aware_filter
+
+        collection = get_or_create_collection(temp_chroma_client, "commits_branch_test")
+
+        # Add a commit on main branch
+        collection.add(
+            documents=[
+                "Session Summary: Implemented user authentication with JWT tokens",
+            ],
+            ids=["commit-1"],
+            metadatas=[
+                {"type": "commit", "project": "test", "branch": "main", "files": "[]"},
+            ],
+        )
+
+        # Search from a different branch - commit should still be visible
+        where_filter = build_branch_aware_filter(project="test", branches=["feature-y"])
+        searcher = HybridSearcher(collection)
+        searcher.build_index(where_filter)
+
+        results = searcher.search("JWT authentication", top_k=10, where_filter=where_filter)
+
+        # Commit should be found
+        assert len(results) > 0
+        assert any(r["meta"]["type"] == "commit" for r in results)
+
+    def test_code_on_other_branch_excluded(self, temp_chroma_client):
+        """Test that code on unrelated branches is excluded."""
+        from src.search import HybridSearcher
+        from src.storage import get_or_create_collection
+        from src.tools.search import build_branch_aware_filter
+
+        collection = get_or_create_collection(temp_chroma_client, "exclude_branch_test")
+
+        # Add code only on feature-x branch
+        collection.add(
+            documents=[
+                "function uniqueFeatureXFunction() { return 'only on feature-x'; }",
+            ],
+            ids=["code-feature-only"],
+            metadatas=[
+                {"type": "code", "file_path": "/src/feature.js", "project": "test", "branch": "feature-x", "language": "javascript"},
+            ],
+        )
+
+        # Search from feature-y branch (should NOT include feature-x code)
+        where_filter = build_branch_aware_filter(project="test", branches=["feature-y", "main"])
+        searcher = HybridSearcher(collection)
+        searcher.build_index(where_filter)
+
+        results = searcher.search("uniqueFeatureXFunction", top_k=10, where_filter=where_filter)
+
+        # Should NOT find the feature-x code
+        for r in results:
+            if r["meta"]["type"] == "code":
+                assert r["meta"]["branch"] != "feature-x"
+
+    def test_main_branch_included_from_feature_branch(self, temp_chroma_client):
+        """Test that main branch code is included when searching from feature branch."""
+        from src.search import HybridSearcher
+        from src.storage import get_or_create_collection
+        from src.tools.search import build_branch_aware_filter
+
+        collection = get_or_create_collection(temp_chroma_client, "main_included_test")
+
+        # Add code only on main branch
+        collection.add(
+            documents=[
+                "function coreUtility() { return 'main branch core code'; }",
+            ],
+            ids=["code-main-core"],
+            metadatas=[
+                {"type": "code", "file_path": "/src/core.js", "project": "test", "branch": "main", "language": "javascript"},
+            ],
+        )
+
+        # Search from feature branch (should include main)
+        where_filter = build_branch_aware_filter(project="test", branches=["feature-x", "main"])
+        searcher = HybridSearcher(collection)
+        searcher.build_index(where_filter)
+
+        results = searcher.search("coreUtility", top_k=10, where_filter=where_filter)
+
+        # Should find main branch code
+        assert len(results) > 0
+        assert any(r["meta"]["branch"] == "main" for r in results)

@@ -11,8 +11,24 @@ import chromadb
 from anthropic import Anthropic
 
 from src.config import DEFAULT_CONFIG
+from src.git import is_git_repo
 from src.search import HybridSearcher, RerankerService
 from src.storage import get_chroma_client, get_or_create_collection
+
+
+def get_repo_path() -> Optional[str]:
+    """
+    Get repository path from current working directory.
+
+    Used by tools to detect the actual repo path for branch detection,
+    instead of hardcoding /projects.
+
+    Returns:
+        Repository path if cwd is a git repo, None otherwise
+    """
+    cwd = os.getcwd()
+    return cwd if is_git_repo(cwd) else None
+
 
 # --- Lazy-initialized Services ---
 

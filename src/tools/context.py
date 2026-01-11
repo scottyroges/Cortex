@@ -11,7 +11,7 @@ from typing import Optional
 from logging_config import get_logger
 from src.git import get_current_branch
 from src.security import scrub_secrets
-from src.tools.services import get_collection, get_searcher
+from src.tools.services import get_collection, get_repo_path, get_searcher
 
 logger = get_logger("tools.context")
 
@@ -47,7 +47,8 @@ def set_repo_context(
 
     try:
         collection = get_collection()
-        branch = get_current_branch("/projects")
+        repo_path = get_repo_path()
+        branch = get_current_branch(repo_path) if repo_path else "unknown"
         timestamp = datetime.now(timezone.utc).isoformat()
 
         tech_stack_id = f"{repository}:tech_stack"
@@ -113,7 +114,8 @@ def set_initiative(
 
     try:
         collection = get_collection()
-        branch = get_current_branch("/projects")
+        repo_path = get_repo_path()
+        branch = get_current_branch(repo_path) if repo_path else "unknown"
         timestamp = datetime.now(timezone.utc).isoformat()
 
         # Build document content
@@ -188,7 +190,8 @@ def update_initiative_status(
 
     try:
         collection = get_collection()
-        branch = get_current_branch("/projects")
+        repo_path = get_repo_path()
+        branch = get_current_branch(repo_path) if repo_path else "unknown"
         timestamp = datetime.now(timezone.utc).isoformat()
 
         # Get existing initiative to preserve the name

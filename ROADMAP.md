@@ -91,34 +91,28 @@ A local, privacy-first "Second Brain" for Claude Code. Acts as an **Episodic & L
 - **Delta Sync**: Git-based change detection, garbage collection for deleted/renamed files, atomic state writes
 - **Retrieval Quality**: min_score 0.3→0.5, removed dead `scope` param, BM25 camelCase/snake_case tokenization
 
-### Branch Filtering Non-Functional ⬜
+### Branch Filtering ✅
 
-**Problem**: Branch is stored in metadata but never used for filtering. Search returns results from all branches.
+Fixed branch filtering with smart document-type-aware behavior:
 
-| Issue | Impact |
-|-------|--------|
-| Hardcoded `/projects` path in `get_current_branch()` | Branch detection fails outside MCP container |
-| Branch not used in search `where` clause | Results polluted with code from all branches |
-| Skeleton not filtered by branch | May show wrong branch's file structure |
-| No `branch` parameter on `search_cortex` | Users can't filter by branch |
+**What was fixed**:
+1. Replaced 6 hardcoded `/projects` paths with `get_repo_path()` helper using `os.getcwd()`
+2. Added `build_branch_aware_filter()` for smart ChromaDB filtering
+3. Added optional `branch` parameter to `search_cortex` tool
+4. Skeleton now filtered by branch with fallback
 
-**Key Insight: Different document types need different branch behavior**:
+**Smart filtering by document type**:
 
-| Document Type | Branch Behavior | Rationale |
-|---------------|-----------------|-----------|
-| Code chunks | Filter by branch | Code differs per branch |
-| Notes/decisions | NO filter (store `origin_branch` for reference) | Decisions persist after merge |
-| Commits | NO filter (store `origin_branch` for reference) | History applies to repo |
-| Tech stack | NO filter (repo-level) | Applies to whole repo |
-| Initiatives | NO filter (repo-level) | Workstreams span branches |
+| Document Type | Branch Behavior | Implementation |
+|---------------|-----------------|----------------|
+| Code chunks | Filter by `[current, "main"]` | `{"type": "code", "branch": {"$in": branches}}` |
+| Skeleton | Filter by branch | Same as code |
+| Notes/commits | NO filter | Always visible cross-branch |
+| Tech stack/initiatives | NO filter | Repo-level context |
 
-**Fix Required** (`server.py`, `rag_utils.py`):
-1. Pass actual project path to `get_current_branch()` instead of `/projects`
-2. Add optional `branch` parameter to `search_cortex` tool
-3. Branch filter for code: `{"type": "code", "branch": {"$in": [current, "main"]}}`
-4. NO branch filter for notes/commits: `{"type": {"$in": ["note", "commit"]}}`
-5. Filter skeleton results by current branch
-6. Store `origin_branch` on notes/commits (for reference, not filtering)
+**Files modified**: `services.py`, `search.py`, `notes.py`, `context.py`, `admin.py`
+
+**Tests added**: 14 new tests (136 total) covering filter construction, repo path detection, and branch-aware search integration.
 
 ### Metadata Quality Improvements ✅
 

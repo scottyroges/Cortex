@@ -11,7 +11,7 @@ from typing import Optional
 from logging_config import get_logger
 from src.git import get_current_branch
 from src.storage import get_collection_stats
-from src.tools.services import CONFIG, get_collection
+from src.tools.services import CONFIG, get_collection, get_repo_path
 
 logger = get_logger("tools.admin")
 
@@ -187,7 +187,8 @@ def get_skeleton(
 
     try:
         collection = get_collection()
-        branch = get_current_branch("/projects")
+        repo_path = get_repo_path()
+        branch = get_current_branch(repo_path) if repo_path else "unknown"
 
         # Try current branch first, then fall back to any branch
         doc_id = f"{project}:skeleton:{branch}"
