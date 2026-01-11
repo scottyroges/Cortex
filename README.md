@@ -21,8 +21,8 @@ git clone https://github.com/scottyroges/Cortex.git
 cd Cortex
 docker build -t cortex .
 
-# Install wrapper script
-cp cortex /usr/local/bin/
+# Symlink wrapper script (auto-updates with git pull)
+ln -sf "$(pwd)/cortex" /usr/local/bin/cortex
 ```
 
 ### Configure Claude Code
