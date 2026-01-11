@@ -57,6 +57,14 @@ A local, privacy-first "Second Brain" for Claude Code. Acts as an **Episodic & L
 |---------|-------------|--------|
 | Async Long-Running Tasks | Make `commit_to_cortex` and `ingest_code_into_cortex` async - return success immediately, process in background | ⬜ |
 
+### Admin & Maintenance
+
+| Feature | Description | Status |
+|---------|-------------|--------|
+| Datastore Analysis | `analyze_cortex` tool - show stats by type (code/notes/commits), project, branch, storage size, stale entries | ⬜ |
+| Datastore Cleanup | `cleanup_cortex` tool - remove orphaned chunks, old notes/commits, entries from deleted projects | ⬜ |
+| Selective Purge | Delete by filter (project, branch, type, date range) | ⬜ |
+
 ### Domain-Specific Memories
 
 | Feature | Description | Status |
