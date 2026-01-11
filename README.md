@@ -137,12 +137,28 @@ You can also check from within a Claude Code session using the `get_cortex_versi
 
 ## MCP Tools
 
+### Core Tools
+
 | Tool | Description |
 |------|-------------|
 | `search_cortex` | Search memory with hybrid retrieval + reranking |
 | `ingest_code_into_cortex` | Index a codebase with AST chunking and delta sync |
 | `commit_to_cortex` | Save session summary + re-index changed files |
 | `save_note_to_cortex` | Store notes, decisions, or documentation |
+
+### Context Tools
+
+| Tool | Description |
+|------|-------------|
+| `set_repo_context` | Set static tech stack info for a repository (e.g., "Python, FastAPI, PostgreSQL") |
+| `set_initiative` | Set current workstream/epic with name and status |
+| `update_initiative_status` | Quick update for initiative status without changing name |
+| `get_context_from_cortex` | Retrieve tech stack and initiative context |
+
+### Admin Tools
+
+| Tool | Description |
+|------|-------------|
 | `configure_cortex` | Adjust min_score, verbose mode, top_k settings |
 | `toggle_cortex` | Enable/disable for A/B testing |
 | `get_cortex_version` | Check daemon version and if rebuild is needed |
@@ -232,15 +248,24 @@ pytest tests/ -v
 
 ```
 Cortex/
-├── cortex             # Wrapper script (install to /usr/local/bin)
-├── server.py          # MCP server + tool definitions
-├── rag_utils.py       # ChromaDB, FlashRank, BM25, secret scrubbing
-├── ingest.py          # File walking, AST chunking, delta sync
-├── http_server.py     # FastAPI debug/Phase 2 endpoints
-├── logging_config.py  # Debug logging configuration
-├── requirements.txt   # Python dependencies
-├── Dockerfile         # Container definition
-└── tests/             # pytest test suite
+├── cortex                 # Wrapper script (install to /usr/local/bin)
+├── src/
+│   ├── server.py          # MCP server entry point
+│   ├── tools/             # MCP tool implementations
+│   │   ├── search.py      # search_cortex
+│   │   ├── ingest.py      # ingest_code_into_cortex
+│   │   ├── context.py     # set_repo_context, set_initiative, etc.
+│   │   ├── notes.py       # save_note, commit_to_cortex
+│   │   └── admin.py       # configure, toggle, get_version, get_skeleton
+│   ├── search/            # Hybrid search, BM25, reranker
+│   ├── ingest/            # AST chunking, delta sync, skeleton
+│   ├── storage/           # ChromaDB, garbage collection
+│   ├── security/          # Secret scrubbing
+│   ├── git/               # Branch detection, delta tracking
+│   └── http/              # FastAPI debug endpoints
+├── tests/                 # pytest test suite
+├── requirements.txt       # Python dependencies
+└── Dockerfile             # Container definition
 ```
 
 ## License

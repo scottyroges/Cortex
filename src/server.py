@@ -26,9 +26,10 @@ from src.tools import (
     ingest_code_into_cortex,
     save_note_to_cortex,
     search_cortex,
-    set_context_in_cortex,
+    set_initiative,
+    set_repo_context,
     toggle_cortex,
-    update_project_status,
+    update_initiative_status,
 )
 
 # Initialize logging
@@ -52,9 +53,10 @@ mcp.tool()(save_note_to_cortex)
 mcp.tool()(commit_to_cortex)
 
 # Context
-mcp.tool()(set_context_in_cortex)
+mcp.tool()(set_repo_context)
+mcp.tool()(set_initiative)
+mcp.tool()(update_initiative_status)
 mcp.tool()(get_context_from_cortex)
-mcp.tool()(update_project_status)
 
 # Admin
 mcp.tool()(configure_cortex)

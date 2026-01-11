@@ -141,36 +141,37 @@ def search_cortex(
             except Exception as e:
                 logger.debug(f"Skeleton fetch failed: {e}")
 
-        # Fetch project context (domain + status)
+        # Fetch repository context (tech_stack + initiative)
         context_data = None
         if detected_project and detected_project != "unknown":
             try:
-                domain_id = f"{detected_project}:domain_context"
-                status_id = f"{detected_project}:project_context"
+                tech_stack_id = f"{detected_project}:tech_stack"
+                initiative_id = f"{detected_project}:initiative"
                 context_results = collection.get(
-                    ids=[domain_id, status_id],
+                    ids=[tech_stack_id, initiative_id],
                     include=["documents", "metadatas"],
                 )
                 if context_results["documents"]:
-                    context_data = {"project": detected_project}
+                    context_data = {"repository": detected_project}
                     for i, doc_id in enumerate(context_results.get("ids", [])):
                         if i < len(context_results.get("documents", [])):
                             doc = context_results["documents"][i]
                             meta = context_results["metadatas"][i] if context_results.get("metadatas") else {}
-                            if doc_id == domain_id:
-                                context_data["domain"] = {
+                            if doc_id == tech_stack_id:
+                                context_data["tech_stack"] = {
                                     "content": doc,
                                     "updated_at": meta.get("updated_at", "unknown"),
                                 }
-                            elif doc_id == status_id:
-                                context_data["status"] = {
-                                    "content": doc,
+                            elif doc_id == initiative_id:
+                                context_data["initiative"] = {
+                                    "name": meta.get("initiative_name", ""),
+                                    "status": meta.get("initiative_status", ""),
                                     "updated_at": meta.get("updated_at", "unknown"),
                                 }
-                    if not context_data.get("domain") and not context_data.get("status"):
+                    if not context_data.get("tech_stack") and not context_data.get("initiative"):
                         context_data = None
                     else:
-                        logger.debug(f"Context included: domain={bool(context_data.get('domain'))}, status={bool(context_data.get('status'))}")
+                        logger.debug(f"Context included: tech_stack={bool(context_data.get('tech_stack'))}, initiative={bool(context_data.get('initiative'))}")
             except Exception as e:
                 logger.debug(f"Context fetch failed: {e}")
 

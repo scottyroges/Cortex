@@ -130,32 +130,23 @@ Added timestamp metadata to all document types for time-based queries:
 - `indexed_at` on code chunks in `ingest_file()`
 - All timestamps use ISO 8601 format: `datetime.now(timezone.utc).isoformat()`
 
-### Context Model Refactor ⬜
+### Context Model Refactor ✅
 
-**Problem**: "Project" is overloaded - means both repository AND task/epic. Parameters are confusingly named.
+Refactored confusing context parameters to a clearer model:
 
-| Current | Problem |
-|---------|---------|
-| `project` | Ambiguous - repo or initiative? |
-| `domain` | Unclear - means tech stack |
-| `project_status` | Really means initiative status |
+| Old | New | Description |
+|-----|-----|-------------|
+| `project` | `repository` | The codebase identifier |
+| `domain` | `tech_stack` | Static repo context - technologies, patterns |
+| `project_status` | `initiative` + `status` | Current workstream/epic and its state |
 
-**New Model**:
+**New Tools**:
+- `set_repo_context(repository, tech_stack)` - Static tech stack, set once per repo
+- `set_initiative(repository, name, status)` - Dynamic workstream, updated frequently
+- `update_initiative_status(status, repository)` - Quick status update
+- `get_context_from_cortex(repository)` - Retrieve both contexts
 
-| Concept | Description | Example |
-|---------|-------------|---------|
-| **Repository** | The codebase (auto-detected from path) | `Cortex`, `my-app` |
-| **Tech Stack** | Static repo context - technologies, patterns | `Python, ChromaDB, FastMCP` |
-| **Initiative** | The current workstream/epic | `Mongo→Postgres Migration` |
-| **Status** | Current state of the initiative | `Phase 2: Users done, Orders in progress` |
-
-**Fix Required** (`server.py`):
-1. Rename `domain` → `tech_stack` in `set_context_in_cortex()`
-2. Split `project_status` into `initiative` + `status`
-3. Update docstrings to clarify repository vs initiative
-4. Consider splitting into two tools:
-   - `set_repo_context(project, tech_stack)` - static, set once
-   - `set_initiative(name, status)` - dynamic, updated frequently
+**Document IDs**: `{repository}:tech_stack`, `{repository}:initiative`
 
 ### MCP Tool Redesign ⬜
 

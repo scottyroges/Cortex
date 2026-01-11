@@ -320,10 +320,10 @@ class TestToggleCortex:
 
 
 class TestContextTools:
-    """Tests for context composition tools."""
+    """Tests for context composition tools (set_repo_context, set_initiative, etc.)."""
 
-    def test_set_context_saves_domain(self, temp_chroma_client):
-        """Test that set_context_in_cortex saves domain context."""
+    def test_set_repo_context_saves_tech_stack(self, temp_chroma_client):
+        """Test that set_repo_context saves tech stack context."""
         from datetime import datetime, timezone
 
         from src.security import scrub_secrets
@@ -331,31 +331,31 @@ class TestContextTools:
 
         collection = get_or_create_collection(temp_chroma_client, "context_test")
 
-        project = "myproject"
-        domain = "NestJS backend, PostgreSQL database, React frontend"
-        domain_id = f"{project}:domain_context"
+        repository = "myproject"
+        tech_stack = "NestJS backend, PostgreSQL database, React frontend"
+        tech_stack_id = f"{repository}:tech_stack"
         timestamp = datetime.now(timezone.utc).isoformat()
 
         collection.upsert(
-            ids=[domain_id],
-            documents=[scrub_secrets(domain)],
+            ids=[tech_stack_id],
+            documents=[scrub_secrets(tech_stack)],
             metadatas=[{
-                "type": "domain_context",
-                "project": project,
+                "type": "tech_stack",
+                "repository": repository,
                 "branch": "main",
                 "updated_at": timestamp,
             }],
         )
 
         # Verify saved
-        results = collection.get(ids=[domain_id], include=["documents", "metadatas"])
+        results = collection.get(ids=[tech_stack_id], include=["documents", "metadatas"])
         assert len(results["ids"]) == 1
         assert "NestJS" in results["documents"][0]
-        assert results["metadatas"][0]["type"] == "domain_context"
-        assert results["metadatas"][0]["project"] == project
+        assert results["metadatas"][0]["type"] == "tech_stack"
+        assert results["metadatas"][0]["repository"] == repository
 
-    def test_set_context_saves_project_status(self, temp_chroma_client):
-        """Test that set_context_in_cortex saves project status."""
+    def test_set_initiative_saves_name_and_status(self, temp_chroma_client):
+        """Test that set_initiative saves initiative name and status."""
         from datetime import datetime, timezone
 
         from src.security import scrub_secrets
@@ -363,99 +363,112 @@ class TestContextTools:
 
         collection = get_or_create_collection(temp_chroma_client, "context_test2")
 
-        project = "myproject"
-        status = "Migration V1: Phase 2 - auth module complete, API review pending"
-        status_id = f"{project}:project_context"
+        repository = "myproject"
+        initiative_name = "Migration V1"
+        initiative_status = "Phase 2 - auth module complete, API review pending"
+        initiative_id = f"{repository}:initiative"
         timestamp = datetime.now(timezone.utc).isoformat()
 
+        content = f"{initiative_name}\n\nStatus: {initiative_status}"
+
         collection.upsert(
-            ids=[status_id],
-            documents=[scrub_secrets(status)],
+            ids=[initiative_id],
+            documents=[scrub_secrets(content)],
             metadatas=[{
-                "type": "project_context",
-                "project": project,
+                "type": "initiative",
+                "repository": repository,
+                "initiative_name": initiative_name,
+                "initiative_status": initiative_status,
                 "branch": "main",
                 "updated_at": timestamp,
             }],
         )
 
         # Verify saved
-        results = collection.get(ids=[status_id], include=["documents", "metadatas"])
+        results = collection.get(ids=[initiative_id], include=["documents", "metadatas"])
         assert len(results["ids"]) == 1
         assert "Phase 2" in results["documents"][0]
-        assert results["metadatas"][0]["type"] == "project_context"
+        assert results["metadatas"][0]["type"] == "initiative"
+        assert results["metadatas"][0]["initiative_name"] == initiative_name
+        assert results["metadatas"][0]["initiative_status"] == initiative_status
 
-    def test_context_upsert_overwrites(self, temp_chroma_client):
-        """Test that context is overwritten on update (upsert behavior)."""
+    def test_initiative_upsert_overwrites(self, temp_chroma_client):
+        """Test that initiative is overwritten on update (upsert behavior)."""
         from datetime import datetime, timezone
 
         from src.storage import get_or_create_collection
 
         collection = get_or_create_collection(temp_chroma_client, "context_upsert")
 
-        project = "myproject"
-        status_id = f"{project}:project_context"
+        repository = "myproject"
+        initiative_id = f"{repository}:initiative"
 
-        # First status
+        # First initiative
         collection.upsert(
-            ids=[status_id],
-            documents=["Phase 1: In progress"],
+            ids=[initiative_id],
+            documents=["Feature X\n\nStatus: Phase 1: In progress"],
             metadatas=[{
-                "type": "project_context",
-                "project": project,
+                "type": "initiative",
+                "repository": repository,
+                "initiative_name": "Feature X",
+                "initiative_status": "Phase 1: In progress",
                 "branch": "main",
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }],
         )
 
-        # Update status
+        # Update initiative
         collection.upsert(
-            ids=[status_id],
-            documents=["Phase 2: Started"],
+            ids=[initiative_id],
+            documents=["Feature X\n\nStatus: Phase 2: Started"],
             metadatas=[{
-                "type": "project_context",
-                "project": project,
+                "type": "initiative",
+                "repository": repository,
+                "initiative_name": "Feature X",
+                "initiative_status": "Phase 2: Started",
                 "branch": "main",
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }],
         )
 
         # Should only have one document with updated content
-        results = collection.get(ids=[status_id], include=["documents"])
+        results = collection.get(ids=[initiative_id], include=["documents"])
         assert len(results["ids"]) == 1
         assert "Phase 2" in results["documents"][0]
         assert "Phase 1" not in results["documents"][0]
 
     def test_get_context_retrieves_both(self, temp_chroma_client):
-        """Test that get_context retrieves both domain and project context."""
+        """Test that get_context retrieves both tech_stack and initiative."""
         from datetime import datetime, timezone
 
         from src.storage import get_or_create_collection
 
         collection = get_or_create_collection(temp_chroma_client, "context_get")
 
-        project = "myproject"
-        domain_id = f"{project}:domain_context"
-        status_id = f"{project}:project_context"
+        repository = "myproject"
+        tech_stack_id = f"{repository}:tech_stack"
+        initiative_id = f"{repository}:initiative"
         timestamp = datetime.now(timezone.utc).isoformat()
 
         # Save both contexts
         collection.upsert(
-            ids=[domain_id],
+            ids=[tech_stack_id],
             documents=["Python FastAPI backend"],
             metadatas=[{
-                "type": "domain_context",
-                "project": project,
+                "type": "tech_stack",
+                "repository": repository,
                 "branch": "main",
                 "updated_at": timestamp,
             }],
         )
         collection.upsert(
-            ids=[status_id],
-            documents=["Implementing user auth"],
+            ids=[initiative_id],
+            documents=["User Auth\n\nStatus: Implementing"],
             metadatas=[{
-                "type": "project_context",
-                "project": project,
+                "type": "initiative",
+                "repository": repository,
+                "initiative_name": "User Auth",
+                "initiative_status": "Implementing",
                 "branch": "main",
                 "updated_at": timestamp,
             }],
@@ -463,7 +476,7 @@ class TestContextTools:
 
         # Retrieve both
         results = collection.get(
-            ids=[domain_id, status_id],
+            ids=[tech_stack_id, initiative_id],
             include=["documents", "metadatas"],
         )
 
@@ -472,7 +485,7 @@ class TestContextTools:
         # Verify both are present
         docs = results["documents"]
         assert any("FastAPI" in doc for doc in docs)
-        assert any("user auth" in doc for doc in docs)
+        assert any("User Auth" in doc for doc in docs)
 
     def test_context_scrubs_secrets(self, temp_chroma_client):
         """Test that context has secrets scrubbed."""
@@ -483,25 +496,25 @@ class TestContextTools:
 
         collection = get_or_create_collection(temp_chroma_client, "context_secrets")
 
-        project = "myproject"
-        domain_id = f"{project}:domain_context"
+        repository = "myproject"
+        tech_stack_id = f"{repository}:tech_stack"
 
-        # Domain with a secret
-        domain_with_secret = "Backend using API key AKIAIOSFODNN7EXAMPLE for AWS"
+        # Tech stack with a secret
+        tech_stack_with_secret = "Backend using API key AKIAIOSFODNN7EXAMPLE for AWS"
         timestamp = datetime.now(timezone.utc).isoformat()
 
         collection.upsert(
-            ids=[domain_id],
-            documents=[scrub_secrets(domain_with_secret)],
+            ids=[tech_stack_id],
+            documents=[scrub_secrets(tech_stack_with_secret)],
             metadatas=[{
-                "type": "domain_context",
-                "project": project,
+                "type": "tech_stack",
+                "repository": repository,
                 "branch": "main",
                 "updated_at": timestamp,
             }],
         )
 
-        results = collection.get(ids=[domain_id], include=["documents"])
+        results = collection.get(ids=[tech_stack_id], include=["documents"])
         assert "AKIAIOSFODNN7EXAMPLE" not in results["documents"][0]
 
     def test_context_included_in_search(self, temp_chroma_client):
@@ -512,9 +525,9 @@ class TestContextTools:
 
         collection = get_or_create_collection(temp_chroma_client, "context_search")
 
-        project = "searchproject"
-        domain_id = f"{project}:domain_context"
-        status_id = f"{project}:project_context"
+        repository = "searchproject"
+        tech_stack_id = f"{repository}:tech_stack"
+        initiative_id = f"{repository}:initiative"
         timestamp = datetime.now(timezone.utc).isoformat()
 
         # Add some code
@@ -524,7 +537,7 @@ class TestContextTools:
             metadatas=[{
                 "type": "code",
                 "file_path": "/app/utils.py",
-                "project": project,
+                "project": repository,
                 "branch": "main",
                 "language": "python",
             }],
@@ -532,21 +545,23 @@ class TestContextTools:
 
         # Add context
         collection.upsert(
-            ids=[domain_id],
+            ids=[tech_stack_id],
             documents=["E-commerce platform with Python backend"],
             metadatas=[{
-                "type": "domain_context",
-                "project": project,
+                "type": "tech_stack",
+                "repository": repository,
                 "branch": "main",
                 "updated_at": timestamp,
             }],
         )
         collection.upsert(
-            ids=[status_id],
-            documents=["Building checkout flow"],
+            ids=[initiative_id],
+            documents=["Checkout Flow\n\nStatus: Building"],
             metadatas=[{
-                "type": "project_context",
-                "project": project,
+                "type": "initiative",
+                "repository": repository,
+                "initiative_name": "Checkout Flow",
+                "initiative_status": "Building",
                 "branch": "main",
                 "updated_at": timestamp,
             }],
@@ -554,7 +569,7 @@ class TestContextTools:
 
         # Simulate search_cortex context fetch pattern
         context_results = collection.get(
-            ids=[domain_id, status_id],
+            ids=[tech_stack_id, initiative_id],
             include=["documents", "metadatas"],
         )
 
@@ -562,46 +577,40 @@ class TestContextTools:
         assert len(context_results["ids"]) == 2
         docs = context_results["documents"]
         assert any("E-commerce" in doc for doc in docs)
-        assert any("checkout" in doc for doc in docs)
+        assert any("Checkout" in doc for doc in docs)
 
-    def test_set_context_validation_requires_content(self):
-        """Test that set_context requires at least one of domain or project_status."""
-        # Simulate the validation logic from set_context_in_cortex
-        domain = None
-        project_status = None
+    def test_set_repo_context_validation_requires_tech_stack(self):
+        """Test that set_repo_context requires tech_stack parameter."""
+        repository = "myproject"
+        tech_stack = None
 
-        # This is the validation check in set_context_in_cortex
-        if not domain and not project_status:
+        if not tech_stack:
             error = json.dumps({
-                "error": "At least one of 'domain' or 'project_status' must be provided",
+                "error": "Tech stack description is required",
             })
             parsed = json.loads(error)
             assert "error" in parsed
-            assert "domain" in parsed["error"] or "project_status" in parsed["error"]
+            assert "tech_stack" in parsed["error"].lower() or "required" in parsed["error"].lower()
 
-    def test_get_context_validation_requires_project(self):
-        """Test that get_context requires project parameter."""
-        # Simulate the validation logic from get_context_from_cortex
-        project = None
+    def test_get_context_validation_requires_repository(self):
+        """Test that get_context requires repository parameter."""
+        repository = None
 
-        if not project:
+        if not repository:
             error = json.dumps({
-                "error": "Project name is required",
-                "hint": "Provide the project identifier",
+                "error": "Repository name is required",
             })
             parsed = json.loads(error)
             assert "error" in parsed
             assert "required" in parsed["error"].lower()
 
-    def test_update_status_validation_requires_project(self):
-        """Test that update_project_status requires project parameter."""
-        # Simulate the validation logic from update_project_status
-        project = None
+    def test_update_initiative_status_validation_requires_repository(self):
+        """Test that update_initiative_status requires repository parameter."""
+        repository = None
 
-        if not project:
+        if not repository:
             error = json.dumps({
-                "error": "Project name is required",
-                "hint": "Provide the project identifier",
+                "error": "Repository name is required",
             })
             parsed = json.loads(error)
             assert "error" in parsed
@@ -612,13 +621,13 @@ class TestContextTools:
         from src.storage import get_or_create_collection
 
         collection = get_or_create_collection(temp_chroma_client, "empty_context")
-        project = "nonexistent_project"
-        domain_id = f"{project}:domain_context"
-        status_id = f"{project}:project_context"
+        repository = "nonexistent_project"
+        tech_stack_id = f"{repository}:tech_stack"
+        initiative_id = f"{repository}:initiative"
 
         # Try to fetch non-existent context
         results = collection.get(
-            ids=[domain_id, status_id],
+            ids=[tech_stack_id, initiative_id],
             include=["documents", "metadatas"],
         )
 
@@ -627,87 +636,49 @@ class TestContextTools:
 
         # Simulate the response logic
         context = {
-            "project": project,
-            "domain": None,
-            "project_status": None,
+            "repository": repository,
+            "tech_stack": None,
+            "initiative": None,
         }
-        has_context = context["domain"] or context["project_status"]
+        has_context = context["tech_stack"] or context["initiative"]
         assert not has_context
 
-    def test_set_context_domain_only(self, temp_chroma_client):
-        """Test setting only domain context (no project_status)."""
+    def test_set_initiative_name_only(self, temp_chroma_client):
+        """Test setting initiative with name only (no status)."""
         from datetime import datetime, timezone
 
         from src.security import scrub_secrets
         from src.storage import get_or_create_collection
 
-        collection = get_or_create_collection(temp_chroma_client, "domain_only")
+        collection = get_or_create_collection(temp_chroma_client, "initiative_name_only")
 
-        project = "testproj"
-        domain = "Python Flask backend"
-        domain_id = f"{project}:domain_context"
+        repository = "testproj"
+        initiative_name = "Feature Y"
+        initiative_id = f"{repository}:initiative"
         timestamp = datetime.now(timezone.utc).isoformat()
 
-        # Only save domain (simulate set_context with domain only)
-        saved = {}
+        # Save initiative with name only
         collection.upsert(
-            ids=[domain_id],
-            documents=[scrub_secrets(domain)],
+            ids=[initiative_id],
+            documents=[scrub_secrets(initiative_name)],
             metadatas=[{
-                "type": "domain_context",
-                "project": project,
+                "type": "initiative",
+                "repository": repository,
+                "initiative_name": initiative_name,
+                "initiative_status": "",
                 "branch": "main",
                 "updated_at": timestamp,
             }],
         )
-        saved["domain_context_id"] = domain_id
-
-        # Verify only domain was saved
-        assert "domain_context_id" in saved
-        assert "project_context_id" not in saved
 
         # Verify content
-        results = collection.get(ids=[domain_id], include=["documents"])
-        assert "Flask" in results["documents"][0]
+        results = collection.get(ids=[initiative_id], include=["documents", "metadatas"])
+        assert "Feature Y" in results["documents"][0]
+        assert results["metadatas"][0]["initiative_name"] == initiative_name
+        assert results["metadatas"][0]["initiative_status"] == ""
 
-    def test_set_context_status_only(self, temp_chroma_client):
-        """Test setting only project_status (no domain)."""
-        from datetime import datetime, timezone
-
-        from src.security import scrub_secrets
-        from src.storage import get_or_create_collection
-
-        collection = get_or_create_collection(temp_chroma_client, "status_only")
-
-        project = "testproj"
-        project_status = "Working on feature X"
-        status_id = f"{project}:project_context"
-        timestamp = datetime.now(timezone.utc).isoformat()
-
-        # Only save status (simulate set_context with status only)
-        saved = {}
-        collection.upsert(
-            ids=[status_id],
-            documents=[scrub_secrets(project_status)],
-            metadatas=[{
-                "type": "project_context",
-                "project": project,
-                "branch": "main",
-                "updated_at": timestamp,
-            }],
-        )
-        saved["project_context_id"] = status_id
-
-        # Verify only status was saved
-        assert "project_context_id" in saved
-        assert "domain_context_id" not in saved
-
-        # Verify content
-        results = collection.get(ids=[status_id], include=["documents"])
-        assert "feature X" in results["documents"][0]
-
-    def test_update_project_status_overwrites(self, temp_chroma_client):
-        """Test that update_project_status overwrites existing status."""
+    def test_update_initiative_status_overwrites(self, temp_chroma_client):
+        """Test that update_initiative_status overwrites existing status."""
         from datetime import datetime, timezone
 
         from src.security import scrub_secrets
@@ -715,39 +686,45 @@ class TestContextTools:
 
         collection = get_or_create_collection(temp_chroma_client, "update_status")
 
-        project = "testproj"
-        status_id = f"{project}:project_context"
+        repository = "testproj"
+        initiative_id = f"{repository}:initiative"
+        initiative_name = "Feature Z"
 
-        # Initial status
+        # Initial initiative
         collection.upsert(
-            ids=[status_id],
-            documents=["Phase 1: Planning"],
+            ids=[initiative_id],
+            documents=[f"{initiative_name}\n\nStatus: Phase 1: Planning"],
             metadatas=[{
-                "type": "project_context",
-                "project": project,
+                "type": "initiative",
+                "repository": repository,
+                "initiative_name": initiative_name,
+                "initiative_status": "Phase 1: Planning",
                 "branch": "main",
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }],
         )
 
-        # Update status (simulate update_project_status)
+        # Update status (simulate update_initiative_status)
         new_status = "Phase 3: Testing"
         collection.upsert(
-            ids=[status_id],
-            documents=[scrub_secrets(new_status)],
+            ids=[initiative_id],
+            documents=[scrub_secrets(f"{initiative_name}\n\nStatus: {new_status}")],
             metadatas=[{
-                "type": "project_context",
-                "project": project,
+                "type": "initiative",
+                "repository": repository,
+                "initiative_name": initiative_name,
+                "initiative_status": new_status,
                 "branch": "main",
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }],
         )
 
         # Verify update
-        results = collection.get(ids=[status_id], include=["documents"])
+        results = collection.get(ids=[initiative_id], include=["documents", "metadatas"])
         assert len(results["ids"]) == 1
         assert "Phase 3" in results["documents"][0]
         assert "Phase 1" not in results["documents"][0]
+        assert results["metadatas"][0]["initiative_status"] == new_status
 
 
 class TestIntegration:
