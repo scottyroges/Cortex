@@ -617,6 +617,7 @@ def ingest_file(
     doc_ids = []
     path_str = str(file_path)
     lang_str = language.value if language else "unknown"
+    indexed_at = datetime.now(timezone.utc).isoformat()
 
     for i, chunk in enumerate(chunks):
         # Generate contextual header
@@ -647,6 +648,7 @@ def ingest_file(
                     "total_chunks": len(chunks),
                     "language": lang_str,
                     "type": "code",
+                    "indexed_at": indexed_at,
                 }
             ],
         )

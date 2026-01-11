@@ -11,6 +11,7 @@ from rag_utils import (
     BM25Index,
     HybridSearcher,
     RerankerService,
+    apply_recency_boost,
     detect_language,
     get_collection_stats,
     get_current_branch,
@@ -351,3 +352,87 @@ class TestRerankerService:
         for result in results:
             assert "source" in result
             assert "page" in result
+
+
+class TestRecencyBoost:
+    """Tests for recency boost functionality."""
+
+    def test_boost_new_note_higher(self):
+        """Test that newer notes get higher boosted scores."""
+        from datetime import datetime, timezone, timedelta
+
+        now = datetime.now(timezone.utc)
+        old_time = (now - timedelta(days=60)).isoformat()
+        new_time = now.isoformat()
+
+        results = [
+            {"rerank_score": 0.8, "meta": {"type": "note", "created_at": old_time}},
+            {"rerank_score": 0.8, "meta": {"type": "note", "created_at": new_time}},
+        ]
+
+        boosted = apply_recency_boost(results, half_life_days=30)
+
+        # Newer note should have higher boosted score
+        new_result = next(r for r in boosted if r["meta"]["created_at"] == new_time)
+        old_result = next(r for r in boosted if r["meta"]["created_at"] == old_time)
+
+        assert new_result["boosted_score"] > old_result["boosted_score"]
+        assert new_result["recency_boost"] > old_result["recency_boost"]
+
+    def test_code_not_boosted(self):
+        """Test that code chunks are not affected by recency boost."""
+        from datetime import datetime, timezone, timedelta
+
+        now = datetime.now(timezone.utc)
+        old_time = (now - timedelta(days=60)).isoformat()
+
+        results = [
+            {"rerank_score": 0.8, "meta": {"type": "code", "indexed_at": old_time}},
+        ]
+
+        boosted = apply_recency_boost(results)
+
+        # Code should not be boosted - recency_boost should be 1.0
+        assert boosted[0]["recency_boost"] == 1.0
+        assert boosted[0]["boosted_score"] == 0.8
+
+    def test_min_boost_applied(self):
+        """Test that minimum boost floor is applied."""
+        from datetime import datetime, timezone, timedelta
+
+        now = datetime.now(timezone.utc)
+        very_old_time = (now - timedelta(days=365)).isoformat()
+
+        results = [
+            {"rerank_score": 1.0, "meta": {"type": "note", "created_at": very_old_time}},
+        ]
+
+        boosted = apply_recency_boost(results, half_life_days=30, min_boost=0.5)
+
+        # Very old note should hit min_boost floor
+        assert boosted[0]["recency_boost"] == 0.5
+        assert boosted[0]["boosted_score"] == 0.5
+
+    def test_empty_results(self):
+        """Test that empty results are handled."""
+        boosted = apply_recency_boost([])
+        assert boosted == []
+
+    def test_results_resorted_by_boosted_score(self):
+        """Test that results are re-sorted by boosted score."""
+        from datetime import datetime, timezone, timedelta
+
+        now = datetime.now(timezone.utc)
+        old_time = (now - timedelta(days=60)).isoformat()
+        new_time = now.isoformat()
+
+        # Old note has higher rerank_score but new note should win after boost
+        results = [
+            {"rerank_score": 0.9, "meta": {"type": "note", "created_at": old_time}},
+            {"rerank_score": 0.7, "meta": {"type": "note", "created_at": new_time}},
+        ]
+
+        boosted = apply_recency_boost(results, half_life_days=30)
+
+        # Newer note should now be first despite lower original score
+        assert boosted[0]["meta"]["created_at"] == new_time

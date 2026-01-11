@@ -140,21 +140,13 @@ metadatas=[{"tags": json.dumps(tags)}]  # '["auth", "security"]'
 # Or use ChromaDB's native list support if available
 ```
 
-### Missing Timestamps on Documents ⬜
+### Missing Timestamps on Documents ✅
 
-**Problem**: Commits, notes, and code chunks have no timestamp metadata. Can't query by time.
-
-| Document Type | Missing Field | Impact |
-|---------------|---------------|--------|
-| Commits | `created_at` | Can't find "commits from last 3 days" |
-| Notes | `created_at` | Can't sort notes by recency |
-| Code chunks | `indexed_at` | Can't distinguish old vs recently changed code |
-
-**Fix Required** (`server.py`, `ingest.py`):
-1. Add `created_at` to commit metadata in `commit_to_cortex()`
-2. Add `created_at` to note metadata in `save_note_to_cortex()`
-3. Add `indexed_at` to code chunk metadata in `ingest_codebase()`
-4. Use ISO 8601 format: `datetime.now(timezone.utc).isoformat()`
+Added timestamp metadata to all document types for time-based queries:
+- `created_at` on commits in `commit_to_cortex()`
+- `created_at` on notes in `save_note_to_cortex()`
+- `indexed_at` on code chunks in `ingest_file()`
+- All timestamps use ISO 8601 format: `datetime.now(timezone.utc).isoformat()`
 
 ### Context Model Refactor ⬜
 

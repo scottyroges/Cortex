@@ -25,6 +25,7 @@ from logging_config import get_logger, setup_logging
 from rag_utils import (
     HybridSearcher,
     RerankerService,
+    apply_recency_boost,
     get_chroma_client,
     get_collection_stats,
     get_current_branch,
@@ -102,6 +103,9 @@ CONFIG = {
     "top_k_rerank": 5,
     # Header provider: "anthropic" (API), "claude-cli", or "none"
     "header_provider": get_default_header_provider(),
+    # Recency boost: applies exponential decay to notes/commits
+    "recency_boost": True,
+    "recency_half_life_days": 30.0,  # Days until boost decays to ~0.5
 }
 
 
@@ -173,9 +177,18 @@ def search_cortex(
         rerank_time = time.time() - rerank_start
         logger.debug(f"Reranking: {len(reranked)} results in {rerank_time*1000:.1f}ms")
 
-        # Apply minimum score filter
+        # Apply recency boost to notes/commits (not code)
+        if CONFIG["recency_boost"]:
+            reranked = apply_recency_boost(
+                reranked,
+                half_life_days=CONFIG["recency_half_life_days"],
+            )
+            logger.debug(f"Recency boost applied (half_life={CONFIG['recency_half_life_days']}d)")
+
+        # Apply minimum score filter (use boosted_score if available)
         threshold = min_score if min_score is not None else CONFIG["min_score"]
-        filtered = [r for r in reranked if r.get("rerank_score", 0) >= threshold]
+        score_key = "boosted_score" if CONFIG["recency_boost"] else "rerank_score"
+        filtered = [r for r in reranked if r.get(score_key, r.get("rerank_score", 0)) >= threshold]
         logger.debug(f"Score filter (>={threshold}): {len(filtered)} results")
 
         # Log top results
@@ -187,14 +200,19 @@ def search_cortex(
         results = []
         for r in filtered:
             meta = r.get("meta", {})
+            # Use boosted_score if recency boost applied, else rerank_score
+            final_score = r.get("boosted_score", r.get("rerank_score", 0))
             result = {
                 "content": r.get("text", "")[:2000],  # Truncate long content
                 "file_path": meta.get("file_path", "unknown"),
                 "project": meta.get("project", "unknown"),
                 "branch": meta.get("branch", "unknown"),
                 "language": meta.get("language", "unknown"),
-                "score": float(round(r.get("rerank_score", 0), 4)),
+                "score": float(round(final_score, 4)),
             }
+            # Include recency boost factor in verbose mode
+            if CONFIG["verbose"] and "recency_boost" in r:
+                result["recency_boost"] = r["recency_boost"]
             results.append(result)
 
         # Fetch skeleton if we have results with a project
@@ -365,6 +383,8 @@ def commit_to_cortex(
     start_time = time.time()
 
     try:
+        from datetime import datetime, timezone
+
         collection = get_collection()
         anthropic = get_anthropic() if CONFIG["header_provider"] == "anthropic" else None
 
@@ -374,6 +394,7 @@ def commit_to_cortex(
 
         branch = get_current_branch("/projects")
         project_id = project or "global"
+        timestamp = datetime.now(timezone.utc).isoformat()
 
         collection.upsert(
             ids=[note_id],
@@ -383,6 +404,7 @@ def commit_to_cortex(
                 "project": project_id,
                 "branch": branch,
                 "files": json.dumps(changed_files),
+                "created_at": timestamp,
             }],
         )
         logger.debug(f"Saved commit summary: {note_id}")
@@ -440,11 +462,13 @@ def save_note_to_cortex(
     logger.info(f"Saving note: title='{title}', project={project}")
 
     try:
+        from datetime import datetime, timezone
         import uuid
 
         collection = get_collection()
         note_id = f"note:{uuid.uuid4().hex[:8]}"
         branch = get_current_branch("/projects")
+        timestamp = datetime.now(timezone.utc).isoformat()
 
         # Build document text
         doc_text = ""
@@ -461,6 +485,7 @@ def save_note_to_cortex(
                 "tags": ",".join(tags) if tags else "",
                 "project": project or "global",
                 "branch": branch,
+                "created_at": timestamp,
             }],
         )
 
@@ -490,6 +515,8 @@ def configure_cortex(
     top_k_retrieve: Optional[int] = None,
     top_k_rerank: Optional[int] = None,
     header_provider: Optional[str] = None,
+    recency_boost: Optional[bool] = None,
+    recency_half_life_days: Optional[float] = None,
 ) -> str:
     """
     Configure Cortex runtime settings.
@@ -500,6 +527,8 @@ def configure_cortex(
         top_k_retrieve: Number of candidates to retrieve before reranking
         top_k_rerank: Number of results to return after reranking
         header_provider: Provider for contextual headers: "anthropic", "claude-cli", or "none"
+        recency_boost: Enable recency boosting for notes/commits (newer = higher rank)
+        recency_half_life_days: Days until recency boost decays to ~0.5 (default 30)
 
     Returns:
         JSON with updated configuration
@@ -527,6 +556,14 @@ def configure_cortex(
             changes.append(f"header_provider={header_provider}")
         else:
             logger.warning(f"Invalid header_provider: {header_provider}. Use 'anthropic', 'claude-cli', or 'none'")
+
+    if recency_boost is not None:
+        CONFIG["recency_boost"] = recency_boost
+        changes.append(f"recency_boost={recency_boost}")
+
+    if recency_half_life_days is not None:
+        CONFIG["recency_half_life_days"] = max(1.0, min(365.0, recency_half_life_days))
+        changes.append(f"recency_half_life_days={CONFIG['recency_half_life_days']}")
 
     if changes:
         logger.info(f"Configuration updated: {', '.join(changes)}")
