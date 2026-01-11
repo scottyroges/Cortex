@@ -10,13 +10,17 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from ingest import (
+    _analyze_tree,
+    _generate_tree_fallback,
     chunk_code_file,
     compute_file_hash,
+    generate_tree_structure,
     get_changed_files,
     ingest_codebase,
     ingest_file,
     load_state,
     save_state,
+    store_skeleton,
     walk_codebase,
 )
 from langchain_text_splitters import Language
@@ -221,7 +225,7 @@ class TestIngestion:
             collection=collection,
             project_id="test",
             branch="main",
-            use_haiku=False,  # Skip Haiku for testing
+            header_provider="none",  # Skip LLM headers for testing
         )
 
         assert len(doc_ids) >= 1
@@ -242,7 +246,7 @@ class TestIngestion:
             collection=collection,
             project_id="myproject",
             branch="feature",
-            use_haiku=False,
+            header_provider="none",
         )
 
         results = collection.get(include=["metadatas"])
@@ -264,7 +268,7 @@ class TestIngestion:
             collection=collection,
             project_id="test",
             branch="main",
-            use_haiku=False,
+            header_provider="none",
         )
 
         results = collection.get(include=["documents"])
@@ -285,60 +289,63 @@ class TestIngestion:
 
         collection = get_or_create_collection(temp_chroma_client, "test_codebase")
 
-        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
-            state_file = f.name
+        # Use a state file path that doesn't exist yet
+        state_file = str(temp_dir / "ingest_state.json")
 
         stats = ingest_codebase(
             root_path=str(temp_dir),
             collection=collection,
             project_id="myproject",
-            use_haiku=False,
+            header_provider="none",
             state_file=state_file,
         )
 
         assert stats["files_scanned"] == 2
         assert stats["files_processed"] == 2
-        assert stats["chunks_added"] >= 2
+        assert stats["chunks_created"] >= 2
         assert stats["errors"] == []
 
     def test_ingest_codebase_delta(self, temp_dir: Path, temp_chroma_client):
         """Test delta sync in codebase ingestion."""
         from rag_utils import get_or_create_collection
 
-        (temp_dir / "main.py").write_text("def main(): pass")
+        # Create a subdirectory for code to avoid state file being picked up
+        code_dir = temp_dir / "code"
+        code_dir.mkdir()
+        (code_dir / "main.py").write_text("def main(): pass")
 
         collection = get_or_create_collection(temp_chroma_client, "test_delta")
 
-        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
-            state_file = f.name
+        # Use a state file outside the code directory
+        state_file = str(temp_dir / "ingest_state.json")
 
         # First ingestion
         stats1 = ingest_codebase(
-            root_path=str(temp_dir),
+            root_path=str(code_dir),
             collection=collection,
-            use_haiku=False,
+            header_provider="none",
             state_file=state_file,
         )
         assert stats1["files_processed"] == 1
 
         # Second ingestion without changes
         stats2 = ingest_codebase(
-            root_path=str(temp_dir),
+            root_path=str(code_dir),
             collection=collection,
-            use_haiku=False,
+            header_provider="none",
             state_file=state_file,
         )
         # No files should be processed (unchanged)
         assert stats2["files_processed"] == 0
 
         # Modify file
-        (temp_dir / "main.py").write_text("def main(): print('changed')")
+        (code_dir / "main.py").write_text("def main(): print('changed')")
 
         # Third ingestion should process the changed file
         stats3 = ingest_codebase(
-            root_path=str(temp_dir),
+            root_path=str(code_dir),
             collection=collection,
-            use_haiku=False,
+            header_provider="none",
             state_file=state_file,
         )
         assert stats3["files_processed"] == 1
@@ -347,26 +354,29 @@ class TestIngestion:
         """Test force full re-ingestion."""
         from rag_utils import get_or_create_collection
 
-        (temp_dir / "main.py").write_text("def main(): pass")
+        # Create a subdirectory for code to avoid state file being picked up
+        code_dir = temp_dir / "code"
+        code_dir.mkdir()
+        (code_dir / "main.py").write_text("def main(): pass")
 
         collection = get_or_create_collection(temp_chroma_client, "test_force")
 
-        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
-            state_file = f.name
+        # Use a state file outside the code directory
+        state_file = str(temp_dir / "ingest_state.json")
 
         # First ingestion
         ingest_codebase(
-            root_path=str(temp_dir),
+            root_path=str(code_dir),
             collection=collection,
-            use_haiku=False,
+            header_provider="none",
             state_file=state_file,
         )
 
         # Force full re-ingestion
         stats = ingest_codebase(
-            root_path=str(temp_dir),
+            root_path=str(code_dir),
             collection=collection,
-            use_haiku=False,
+            header_provider="none",
             state_file=state_file,
             force_full=True,
         )
@@ -387,7 +397,170 @@ class TestIngestion:
             collection=collection,
             project_id="test",
             branch="main",
-            use_haiku=False,
+            header_provider="none",
         )
 
         assert doc_ids == []
+
+
+class TestSkeleton:
+    """Tests for skeleton index functionality."""
+
+    def test_generate_tree_fallback(self, temp_dir: Path):
+        """Test Python fallback tree generation."""
+        # Create test structure
+        src_dir = temp_dir / "src"
+        src_dir.mkdir()
+        (src_dir / "main.py").write_text("print('hello')")
+        (src_dir / "utils.py").write_text("def helper(): pass")
+
+        tests_dir = temp_dir / "tests"
+        tests_dir.mkdir()
+        (tests_dir / "test_main.py").write_text("def test(): pass")
+
+        (temp_dir / "README.md").write_text("# Project")
+
+        from ingest import DEFAULT_IGNORE_PATTERNS
+
+        tree = _generate_tree_fallback(temp_dir, max_depth=10, ignore=DEFAULT_IGNORE_PATTERNS)
+
+        # Check structure
+        assert temp_dir.name in tree
+        assert "src" in tree
+        assert "main.py" in tree
+        assert "utils.py" in tree
+        assert "tests" in tree
+        assert "test_main.py" in tree
+        assert "README.md" in tree
+        assert "├──" in tree or "└──" in tree  # Tree formatting
+
+    def test_generate_tree_fallback_respects_ignore(self, temp_dir: Path):
+        """Test that tree fallback respects ignore patterns."""
+        (temp_dir / "main.py").write_text("print('hello')")
+
+        nm_dir = temp_dir / "node_modules"
+        nm_dir.mkdir()
+        (nm_dir / "package.js").write_text("module.exports = {}")
+
+        from ingest import DEFAULT_IGNORE_PATTERNS
+
+        tree = _generate_tree_fallback(temp_dir, max_depth=10, ignore=DEFAULT_IGNORE_PATTERNS)
+
+        assert "main.py" in tree
+        assert "node_modules" not in tree
+        assert "package.js" not in tree
+
+    def test_generate_tree_fallback_respects_depth(self, temp_dir: Path):
+        """Test that tree fallback respects max depth."""
+        # Create nested structure
+        current = temp_dir
+        for i in range(5):
+            current = current / f"level{i}"
+            current.mkdir()
+            (current / f"file{i}.py").write_text(f"# level {i}")
+
+        from ingest import DEFAULT_IGNORE_PATTERNS
+
+        tree = _generate_tree_fallback(temp_dir, max_depth=2, ignore=DEFAULT_IGNORE_PATTERNS)
+
+        # Should include levels 0-2 but not deeper
+        assert "level0" in tree
+        assert "level1" in tree
+        assert "level2" in tree
+        # level3 and beyond should not be included
+        lines = tree.split("\n")
+        assert not any("level3" in line for line in lines)
+
+    def test_analyze_tree(self):
+        """Test tree stats extraction."""
+        tree = """myproject
+├── src
+│   ├── main.py
+│   └── utils.py
+├── tests
+│   └── test_main.py
+└── README.md"""
+
+        stats = _analyze_tree(tree)
+
+        assert stats["total_lines"] == 7
+        assert stats["total_files"] >= 3  # main.py, utils.py, test_main.py, README.md
+        assert stats["total_dirs"] >= 2  # src, tests
+
+    def test_generate_tree_structure(self, temp_dir: Path):
+        """Test full tree generation (with fallback)."""
+        (temp_dir / "main.py").write_text("print('hello')")
+        (temp_dir / "README.md").write_text("# Project")
+
+        tree, stats = generate_tree_structure(str(temp_dir))
+
+        assert temp_dir.name in tree
+        assert "main.py" in tree
+        assert "README.md" in tree
+        assert "total_files" in stats
+        assert "total_dirs" in stats
+        assert stats["total_lines"] >= 3
+
+    def test_store_skeleton(self, temp_chroma_client):
+        """Test skeleton storage in ChromaDB."""
+        from rag_utils import get_or_create_collection
+
+        collection = get_or_create_collection(temp_chroma_client, "test_skeleton")
+
+        tree = """myproject
+├── src
+│   └── main.py
+└── README.md"""
+        stats = {"total_files": 2, "total_dirs": 1, "total_lines": 4}
+
+        doc_id = store_skeleton(
+            collection=collection,
+            tree_output=tree,
+            project_id="myproject",
+            branch="main",
+            stats=stats,
+        )
+
+        assert doc_id == "myproject:skeleton:main"
+
+        # Verify storage
+        result = collection.get(ids=[doc_id], include=["documents", "metadatas"])
+        assert len(result["documents"]) == 1
+        assert result["documents"][0] == tree
+        assert result["metadatas"][0]["type"] == "skeleton"
+        assert result["metadatas"][0]["project"] == "myproject"
+        assert result["metadatas"][0]["branch"] == "main"
+        assert result["metadatas"][0]["total_files"] == 2
+
+    def test_ingest_codebase_creates_skeleton(self, temp_dir: Path, temp_chroma_client):
+        """Test that ingest_codebase auto-generates skeleton."""
+        from rag_utils import get_or_create_collection
+
+        # Create test files
+        (temp_dir / "main.py").write_text("def main(): pass")
+        (temp_dir / "utils.py").write_text("def helper(): pass")
+
+        collection = get_or_create_collection(temp_chroma_client, "test_skel_ingest")
+
+        # Use a state file path that doesn't exist yet
+        state_file = str(temp_dir / "ingest_state.json")
+
+        stats = ingest_codebase(
+            root_path=str(temp_dir),
+            collection=collection,
+            project_id="myproject",
+            state_file=state_file,
+        )
+
+        # Check skeleton was created
+        assert "skeleton" in stats
+        assert stats["skeleton"]["total_files"] >= 2
+
+        # Verify skeleton is stored
+        skeleton_result = collection.get(
+            where={"$and": [{"type": "skeleton"}, {"project": "myproject"}]},
+            include=["documents", "metadatas"],
+        )
+        assert len(skeleton_result["documents"]) == 1
+        assert "main.py" in skeleton_result["documents"][0]
+        assert "utils.py" in skeleton_result["documents"][0]

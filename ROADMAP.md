@@ -98,12 +98,13 @@ A local, privacy-first "Second Brain" for Claude Code. Acts as an **Episodic & L
 | `log_error_to_cortex` | Save error signature + fix | ⬜ |
 | `solve_error_from_cortex` | Query by stack trace | ⬜ |
 | Constraints | Negative rules ("DO NOT USE X") in preamble | ⬜ |
-| Skeleton Index | `tree` output for file-path grounding | ⬜ |
+| Skeleton Index | `tree` output for file-path grounding | ✅ |
 
 ### Phase 2 Tools
 
 | Tool | Arguments | Status |
 |------|-----------|--------|
+| `get_skeleton` | `project` | ✅ |
 | `set_context_in_cortex` | `domain, project` | ⬜ |
 | `update_project_status` | `status_text` | ⬜ |
 | `ingest_web_to_cortex` | `url, content` | ⬜ |

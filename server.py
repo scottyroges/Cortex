@@ -199,12 +199,41 @@ def search_cortex(
             }
             results.append(result)
 
+        # Fetch skeleton if we have results with a project
+        skeleton_data = None
+        detected_project = project
+        if not detected_project and results:
+            # Use project from first result
+            detected_project = results[0].get("project")
+
+        if detected_project and detected_project != "unknown":
+            try:
+                skeleton_results = collection.get(
+                    where={"$and": [{"type": "skeleton"}, {"project": detected_project}]},
+                    include=["documents", "metadatas"],
+                )
+                if skeleton_results["documents"]:
+                    skel_meta = skeleton_results["metadatas"][0]
+                    skeleton_data = {
+                        "project": detected_project,
+                        "branch": skel_meta.get("branch", "unknown"),
+                        "total_files": skel_meta.get("total_files", 0),
+                        "total_dirs": skel_meta.get("total_dirs", 0),
+                        "tree": skeleton_results["documents"][0],
+                    }
+                    logger.debug(f"Skeleton included: {skel_meta.get('total_files', 0)} files")
+            except Exception as e:
+                logger.debug(f"Skeleton fetch failed: {e}")
+
         response = {
             "query": query,
             "results": results,
             "total_candidates": len(candidates),
             "returned": len(results),
         }
+
+        if skeleton_data:
+            response["project_skeleton"] = skeleton_data
 
         if CONFIG["verbose"]:
             response["config"] = CONFIG
@@ -473,6 +502,75 @@ def configure_cortex(
         "status": "configured",
         "config": CONFIG,
     }, indent=2)
+
+
+@mcp.tool()
+def get_skeleton(
+    project: Optional[str] = None,
+) -> str:
+    """
+    Get the file tree structure for a project.
+
+    Returns the stored skeleton (tree output) for file-path grounding.
+    The skeleton is auto-generated during ingest_code_into_cortex.
+
+    Args:
+        project: Project name (required)
+
+    Returns:
+        JSON with tree structure and metadata
+    """
+    if not project:
+        return json.dumps({
+            "error": "Project name is required",
+            "hint": "Provide the project name used during ingestion",
+        })
+
+    logger.info(f"Getting skeleton for project: {project}")
+
+    try:
+        collection = get_collection()
+        branch = get_current_branch("/projects")
+
+        # Try current branch first, then fall back to any branch
+        doc_id = f"{project}:skeleton:{branch}"
+        result = collection.get(ids=[doc_id], include=["documents", "metadatas"])
+
+        if not result["documents"]:
+            # Try to find skeleton for any branch
+            all_results = collection.get(
+                where={"$and": [{"type": "skeleton"}, {"project": project}]},
+                include=["documents", "metadatas"],
+            )
+            if all_results["documents"]:
+                result = {
+                    "documents": [all_results["documents"][0]],
+                    "metadatas": [all_results["metadatas"][0]],
+                }
+
+        if not result["documents"]:
+            return json.dumps({
+                "error": f"No skeleton found for project '{project}'",
+                "hint": "Run ingest_code_into_cortex first to generate the skeleton",
+            })
+
+        metadata = result["metadatas"][0]
+        tree = result["documents"][0]
+
+        logger.info(f"Skeleton found: {metadata.get('total_files', 0)} files, {metadata.get('total_dirs', 0)} dirs")
+
+        return json.dumps({
+            "project": project,
+            "branch": metadata.get("branch", "unknown"),
+            "generated_at": metadata.get("generated_at", "unknown"),
+            "total_files": metadata.get("total_files", 0),
+            "total_dirs": metadata.get("total_dirs", 0),
+            "tree": tree,
+        }, indent=2)
+
+    except Exception as e:
+        logger.error(f"Get skeleton error: {e}")
+        return json.dumps({"error": str(e)})
 
 
 @mcp.tool()
