@@ -17,10 +17,10 @@ A local, privacy-first "Second Brain" for Claude Code. Acts as an **Episodic & L
 
 | Memory Type | Current State | Gap |
 |-------------|---------------|-----|
-| **Code Memory** | ✅ Excellent - AST chunking, hybrid search, reranking | Minor: no insight linking |
-| **Session Memory** | ⚠️ Partial - plumbing exists but manual | Major: no auto-capture, no "what did I do?" |
-| **Initiative Memory** | ✅ Good - data model solid | Minor: no summarization, no cross-search |
-| **Analysis Memory** | ❌ Missing - insights evaporate | Major: need insight capture tool |
+| **Code Memory** | ✅ Excellent - AST chunking, hybrid search, reranking, insight linking | None |
+| **Session Memory** | ✅ Good - `recall_recent_work` answers "what did I do?" | Minor: no auto-capture |
+| **Initiative Memory** | ✅ Good - `summarize_initiative` provides narrative view | None |
+| **Analysis Memory** | ✅ Good - `insight_to_cortex` captures code analysis | None |
 | **Automatic Capture** | ❌ Missing - entirely opt-in | Major: need lifecycle hooks |
 
 **Core insight**: The storage and retrieval layers are strong. The gap is **automation** - memory requires too much manual discipline to be reliable.
@@ -55,9 +55,9 @@ Dockerized, high-precision memory with hybrid search (Vector + BM25 + FlashRank 
 
 | Feature | Description |
 |---------|-------------|
-| **Recall Recent Work** | `recall_recent_work` tool - timeline view of recent commits/notes for a repository. Answers "what did I do this week?" without manual search queries. Returns summaries grouped by day with initiative context. |
-| **Initiative Summarization** | `summarize_initiative` tool - generate narrative summary of an initiative's progress. Gathers all tagged commits/notes and synthesizes a timeline with key decisions, problems solved, and current state. |
-| **Insight Capture** | `insight_to_cortex` tool - save analysis insights about code architecture, patterns, or behavior. Links insights to specific files so retrieval includes both code AND understanding. Solves "I analyzed this last week but forgot the conclusions." |
+| ✅ **Recall Recent Work** | `recall_recent_work` tool - timeline view of recent commits/notes for a repository. Answers "what did I do this week?" without manual search queries. Returns summaries grouped by day with initiative context. |
+| ✅ **Initiative Summarization** | `summarize_initiative` tool - generate narrative summary of an initiative's progress. Gathers all tagged commits/notes and synthesizes a timeline with key decisions, problems solved, and current state. |
+| ✅ **Insight Capture** | `insight_to_cortex` tool - save analysis insights about code architecture, patterns, or behavior. Links insights to specific files so retrieval includes both code AND understanding. Claude uses proactively after major analysis. |
 | **Session Auto-Prompt** | Detect long/complex sessions and prompt to commit before closing. Heuristics: token count, file edits, elapsed time. Reduces reliance on manual `commit_to_cortex`. |
 
 #### Datastore Management

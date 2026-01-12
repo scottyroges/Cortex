@@ -368,6 +368,36 @@ complete_initiative(initiative="Auth Migration", summary="Successfully migrated 
 
 ---
 
+## Scenario 18: Capturing Code Insights
+
+**Context:** Claude has done significant analysis on code and wants to preserve the understanding.
+
+**Problem:** Insights about code architecture, patterns, or gotchas are lost when the session ends.
+
+**Trigger (automatic):** Claude uses this tool proactively after:
+- Deep-diving into complex code
+- Discovering non-obvious patterns
+- Understanding architectural decisions
+- Finding potential issues or gotchas
+
+**Flow:**
+1. Claude analyzes code (e.g., "explain how auth works")
+2. Claude captures insight: `insight_to_cortex(insight="The auth system uses...", files=["src/auth/middleware.py", "src/auth/tokens.py"])`
+3. Future search for "auth" returns both code AND the insight
+
+**Example:**
+```python
+insight_to_cortex(
+    insight="Auth uses two-phase token refresh. Access tokens expire in 15min, refresh tokens rotate on use. Key gotcha: refresh endpoint must be excluded from token validation.",
+    files=["src/auth/middleware.py", "src/auth/tokens.py"],
+    title="Auth Token Refresh Pattern"
+)
+```
+
+**Tools Used:** `insight_to_cortex`
+
+---
+
 ## Tool Summary by Scenario
 
 | Scenario | Primary Tools |
@@ -388,11 +418,12 @@ complete_initiative(initiative="Auth Migration", summary="Successfully migrated 
 | Managing initiatives | `list_initiatives`, `focus_initiative` |
 | Recalling recent work | `recall_recent_work` |
 | Summarizing initiatives | `summarize_initiative` |
+| Capturing insights | `insight_to_cortex` |
 | Admin/debug | `get_cortex_version`, `configure_cortex` |
 
 ---
 
-## Final Tool Set (17 tools)
+## Final Tool Set (18 tools)
 
 | Tool | Purpose |
 |------|---------|
@@ -413,3 +444,4 @@ complete_initiative(initiative="Auth Migration", summary="Successfully migrated 
 | `complete_initiative` | Mark initiative as done with summary |
 | `recall_recent_work` | Timeline view of recent work for a repository |
 | `summarize_initiative` | Narrative summary of initiative progress |
+| `insight_to_cortex` | Save code analysis insights linked to files (auto-used after analysis) |

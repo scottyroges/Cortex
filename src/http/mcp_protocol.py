@@ -120,6 +120,22 @@ MCP_TOOL_SCHEMAS = [
         },
     },
     {
+        "name": "insight_to_cortex",
+        "description": "Save architectural insights linked to specific code files. **Use this tool proactively** when you've done significant code analysis and want to preserve your understanding. Examples: 'This module uses the observer pattern', 'The auth flow has a race condition here'. Insights are linked to files so future searches return both code AND your previous analysis.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "insight": {"type": "string", "description": "The analysis/understanding to save"},
+                "files": {"type": "array", "items": {"type": "string"}, "description": "List of file paths this insight is about (REQUIRED)"},
+                "title": {"type": "string", "description": "Optional title for the insight"},
+                "tags": {"type": "array", "items": {"type": "string"}, "description": "Optional tags for categorization"},
+                "repository": {"type": "string", "description": "Repository identifier (auto-detected if not provided)"},
+                "initiative": {"type": "string", "description": "Initiative ID or name to tag (uses focused initiative if not specified)"},
+            },
+            "required": ["insight", "files"],
+        },
+    },
+    {
         "name": "set_repo_context",
         "description": "Set static tech stack context for a repository.",
         "inputSchema": {
@@ -362,6 +378,7 @@ def _get_tool_map():
         get_cortex_version,
         get_skeleton,
         ingest_code_into_cortex,
+        insight_to_cortex,
         list_initiatives,
         orient_session,
         recall_recent_work,
@@ -377,6 +394,7 @@ def _get_tool_map():
         "ingest_code_into_cortex": ingest_code_into_cortex,
         "commit_to_cortex": commit_to_cortex,
         "save_note_to_cortex": save_note_to_cortex,
+        "insight_to_cortex": insight_to_cortex,
         "set_repo_context": set_repo_context,
         "set_initiative": set_initiative,
         "create_initiative": create_initiative,

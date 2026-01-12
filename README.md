@@ -168,6 +168,7 @@ You can also check from within a Claude Code session using the `get_cortex_versi
 |------|-------------|
 | `recall_recent_work` | Timeline view of recent commits/notes for a repository. Answers "What did I work on this week?" |
 | `summarize_initiative` | Generate narrative summary of an initiative's progress with timeline and stats |
+| `insight_to_cortex` | Save code analysis insights linked to specific files. Used proactively after major analysis. |
 
 **Initiative Workflow:**
 - New commits and notes are automatically tagged with the focused initiative
@@ -319,7 +320,7 @@ Cortex/
 │   │   ├── search.py      # search_cortex
 │   │   ├── ingest.py      # ingest_code_into_cortex
 │   │   ├── context.py     # set_repo_context, get_context
-│   │   ├── notes.py       # save_note, commit_to_cortex
+│   │   ├── notes.py       # save_note, commit_to_cortex, insight_to_cortex
 │   │   ├── initiatives.py # create, list, focus, complete initiatives
 │   │   └── admin.py       # configure, toggle, get_version, get_skeleton
 │   ├── search/            # Hybrid search, BM25, reranker

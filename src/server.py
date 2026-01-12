@@ -24,6 +24,7 @@ from src.tools import (
     get_cortex_version,
     get_skeleton,
     ingest_code_into_cortex,
+    insight_to_cortex,
     orient_session,
     recall_recent_work,
     save_note_to_cortex,
@@ -55,6 +56,7 @@ mcp.tool()(ingest_code_into_cortex)
 # Notes
 mcp.tool()(save_note_to_cortex)
 mcp.tool()(commit_to_cortex)
+mcp.tool()(insight_to_cortex)
 
 # Context
 mcp.tool()(set_repo_context)

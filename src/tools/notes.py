@@ -294,3 +294,138 @@ def _update_initiative_timestamp(collection, initiative_id: str, timestamp: str)
             )
     except Exception as e:
         logger.warning(f"Failed to update initiative timestamp: {e}")
+
+
+def insight_to_cortex(
+    insight: str,
+    files: list[str],
+    title: Optional[str] = None,
+    tags: Optional[list[str]] = None,
+    repository: Optional[str] = None,
+    initiative: Optional[str] = None,
+) -> str:
+    """
+    Save architectural insights linked to specific code files.
+
+    Use this tool proactively when you've done significant code analysis
+    and want to preserve your understanding. Examples:
+    - "This module uses the observer pattern for event handling"
+    - "The auth flow has a race condition when tokens expire"
+    - "These 3 files form the core data pipeline"
+
+    Insights are linked to files so future searches return both code AND
+    your previous analysis - solving "I figured this out last week but forgot."
+
+    Args:
+        insight: The analysis/understanding to save
+        files: List of file paths this insight is about (REQUIRED, non-empty)
+        title: Optional title for the insight
+        tags: Optional list of tags for categorization
+        repository: Repository identifier (auto-detected if not provided)
+        initiative: Initiative ID/name to tag (uses focused initiative if not specified)
+
+    Returns:
+        JSON with insight ID and save status
+    """
+    # Validate files is non-empty
+    if not files:
+        return json.dumps({
+            "status": "error",
+            "error": "files parameter is required and must be a non-empty list",
+        })
+
+    repo = repository or "global"
+
+    logger.info(f"Saving insight: title='{title}', files={len(files)}, repository={repo}")
+
+    try:
+        collection = get_collection()
+        insight_id = f"insight:{uuid.uuid4().hex[:8]}"
+        repo_path = get_repo_path()
+        branch = get_current_branch(repo_path) if repo_path else "unknown"
+        timestamp = datetime.now(timezone.utc).isoformat()
+
+        # Get initiative tagging
+        initiative_id = None
+        initiative_name = None
+
+        if initiative:
+            # Explicit initiative specified
+            if initiative.startswith("initiative:"):
+                initiative_id = initiative
+                from src.tools.initiatives import _find_initiative
+                init_data = _find_initiative(collection, repo, initiative)
+                if init_data:
+                    initiative_name = init_data["metadata"].get("name", "")
+            else:
+                # Assume it's a name, look up the ID
+                from src.tools.initiatives import _find_initiative
+                init_data = _find_initiative(collection, repo, initiative)
+                if init_data:
+                    initiative_id = init_data["id"]
+                    initiative_name = init_data["metadata"].get("name", "")
+        else:
+            # Use focused initiative
+            initiative_id, initiative_name = _get_focused_initiative_info(repo)
+
+        # Build document text
+        doc_text = ""
+        if title:
+            doc_text = f"{title}\n\n"
+        doc_text += scrub_secrets(insight)
+        doc_text += f"\n\nLinked files: {', '.join(files)}"
+
+        metadata = {
+            "type": "insight",
+            "title": title or "",
+            "files": json.dumps(files),
+            "tags": json.dumps(tags) if tags else "[]",
+            "repository": repo,
+            "project": repo,  # Keep for backwards compatibility
+            "branch": branch,
+            "created_at": timestamp,
+        }
+
+        # Add initiative tagging if available
+        if initiative_id:
+            metadata["initiative_id"] = initiative_id
+            metadata["initiative_name"] = initiative_name or ""
+
+            # Update initiative's updated_at timestamp
+            _update_initiative_timestamp(collection, initiative_id, timestamp)
+
+        collection.upsert(
+            ids=[insight_id],
+            documents=[doc_text],
+            metadatas=[metadata],
+        )
+
+        # Rebuild search index
+        get_searcher().build_index()
+
+        logger.info(f"Insight saved: {insight_id}")
+
+        response = {
+            "status": "saved",
+            "insight_id": insight_id,
+            "type": "insight",
+            "title": title,
+            "files": files,
+            "tags": tags or [],
+        }
+
+        if initiative_id:
+            response["initiative"] = {
+                "id": initiative_id,
+                "name": initiative_name,
+            }
+            response["initiative_name"] = initiative_name
+
+        return json.dumps(response, indent=2)
+
+    except Exception as e:
+        logger.error(f"Insight save error: {e}")
+        return json.dumps({
+            "status": "error",
+            "error": str(e),
+        })
