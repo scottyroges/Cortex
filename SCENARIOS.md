@@ -60,7 +60,7 @@ This document describes the primary workflows for how Claude Code interacts with
 1. `orient_session(path)` - Check staleness, see what initiative was active
 2. If `needs_reindex: true`, run `ingest_code_into_cortex(path)` to catch up
 3. `search_cortex("recent commits")` - Find what changed
-4. `get_skeleton(project)` - Re-orient on file structure
+4. `get_skeleton(repository)` - Re-orient on file structure
 
 **Tools Used:** `orient_session`, `ingest_code_into_cortex`, `search_cortex`, `get_skeleton`
 
@@ -119,7 +119,7 @@ TODO: Add token revocation endpoint for logout, rate limit refresh attempts
 1. `get_context_from_cortex(repo)` - Get tech stack + current initiative
 
 **Flow (file structure):**
-1. `get_skeleton(project)` - Get file tree for path grounding
+1. `get_skeleton(repository)` - Get file tree for path grounding
 
 **Tools Used:** `get_context_from_cortex`, `get_skeleton`
 

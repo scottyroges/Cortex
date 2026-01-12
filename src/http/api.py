@@ -64,7 +64,7 @@ class IngestRequest(BaseModel):
     content: str
     title: Optional[str] = None
     tags: Optional[list[str]] = None
-    project: str = "web"
+    repository: str = "web"
 
 
 class NoteRequest(BaseModel):
@@ -72,7 +72,7 @@ class NoteRequest(BaseModel):
     content: str
     title: Optional[str] = None
     tags: Optional[list[str]] = None
-    project: str = "notes"
+    repository: str = "notes"
 
 
 class SearchResponse(BaseModel):
@@ -95,7 +95,7 @@ def ingest_web(request: IngestRequest) -> dict[str, Any]:
         content: Page content
         title: Optional title
         tags: Optional tags
-        project: Project name (default: "web")
+        repository: Repository name (default: "web")
     """
     logger.info(f"Ingesting web content: url={request.url}")
 
@@ -109,7 +109,7 @@ def ingest_web(request: IngestRequest) -> dict[str, Any]:
     metadata = {
         "type": "web",
         "url": request.url,
-        "project": request.project,
+        "repository": request.repository,
         "ingested_at": datetime.utcnow().isoformat(),
     }
     if request.title:
@@ -138,7 +138,7 @@ def ingest_web(request: IngestRequest) -> dict[str, Any]:
 def search(
     q: str = Query(..., min_length=1),
     limit: int = Query(default=5, le=20),
-    project: Optional[str] = None,
+    repository: Optional[str] = None,
     min_score: float = Query(default=0.3, ge=0.0, le=1.0),
 ) -> SearchResponse:
     """
@@ -147,14 +147,14 @@ def search(
     Args:
         q: Search query
         limit: Maximum results (default 5)
-        project: Optional project filter
+        repository: Optional repository filter
         min_score: Minimum rerank score (default 0.3)
     """
-    logger.info(f"Search: query='{q}', limit={limit}, project={project}")
+    logger.info(f"Search: query='{q}', limit={limit}, repository={repository}")
     start_time = time.time()
 
     # Build filter
-    where_filter = {"project": project} if project else None
+    where_filter = {"repository": repository} if repository else None
 
     # Search
     searcher = get_searcher()
@@ -193,7 +193,7 @@ def save_note(request: NoteRequest) -> dict[str, Any]:
         content: Note content
         title: Optional title
         tags: Optional tags
-        project: Project name (default: "notes")
+        repository: Repository name (default: "notes")
     """
     logger.info(f"Saving note: title={request.title}")
 
@@ -208,7 +208,7 @@ def save_note(request: NoteRequest) -> dict[str, Any]:
     # Build metadata
     metadata = {
         "type": "note",
-        "project": request.project,
+        "repository": request.repository,
         "created_at": datetime.utcnow().isoformat(),
     }
     if request.title:

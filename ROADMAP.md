@@ -39,7 +39,7 @@ Dockerized, high-precision memory with hybrid search (Vector + BM25 + FlashRank 
 
 ### Completed ✅
 
-- **Context Composition** - Domain/project context with auto-injection via `set_repo_context`
+- **Context Composition** - Domain/repository context with auto-injection via `set_repo_context`
 - **Skeleton Index** - File tree output for path grounding via `get_skeleton`
 - **FastAPI Bridge** - HTTP debug endpoints at `localhost:8080`
 - **CLI & Slash Commands** - Shell aliases and `cortex>>` in-chat macros
@@ -64,9 +64,9 @@ Dockerized, high-precision memory with hybrid search (Vector + BM25 + FlashRank 
 | Feature | Description |
 |---------|-------------|
 | Async Long-Running Tasks | Make `commit_to_cortex` and `ingest_code_into_cortex` async with background processing |
-| Datastore Analysis | `analyze_cortex` tool - stats by type, project, branch, storage size |
+| Datastore Analysis | `analyze_cortex` tool - stats by type, repository, branch, storage size |
 | Datastore Cleanup | `cleanup_cortex` tool - remove orphaned chunks, stale entries |
-| Selective Purge | Delete by filter (project, branch, type, date range) |
+| Selective Purge | Delete by filter (repository, branch, type, date range) |
 
 ---
 

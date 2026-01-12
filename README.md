@@ -200,7 +200,7 @@ You can also check from within a Claude Code session using the `get_cortex_versi
 | `configure_cortex` | Adjust min_score, verbose mode, top_k settings |
 | `toggle_cortex` | Enable/disable for A/B testing |
 | `get_cortex_version` | Check daemon version and if rebuild is needed |
-| `get_skeleton` | Get file tree structure for a project |
+| `get_skeleton` | Get file tree structure for a repository |
 
 ## Selective Ingestion
 
@@ -294,9 +294,9 @@ tail -f ~/.cortex/cortex.log
 The HTTP debug server runs on port 8080 by default when the daemon is running.
 
 Debug endpoints:
-- `GET /debug/stats` - Collection statistics by project/type/language
+- `GET /debug/stats` - Collection statistics by repository/type/language
 - `GET /debug/sample?limit=10` - Sample documents
-- `GET /debug/list?project=X` - List documents by project
+- `GET /debug/list?repository=X` - List documents by repository
 - `GET /debug/get/{doc_id}` - Get specific document
 - `GET /debug/search?q=X` - Raw search with timing info
 

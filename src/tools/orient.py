@@ -34,7 +34,7 @@ def orient_session(
 
     Returns:
         JSON with:
-            project: str - Project name (derived from path)
+            repository: str - Repository name (derived from path)
             branch: str - Current git branch
             indexed: bool - Is this repo indexed?
             last_indexed: str - When was it last indexed?
@@ -50,17 +50,17 @@ def orient_session(
     try:
         collection = get_collection()
 
-        # Derive project name from path
-        project_name = project_path.rstrip("/").split("/")[-1]
+        # Derive repository name from path
+        repo_name = project_path.rstrip("/").split("/")[-1]
         current_branch = get_current_branch(project_path)
 
         # Load ingestion state
         state = migrate_state(load_state())
 
-        # Check if this specific project is indexed
-        indexed_project = state.get("project")
+        # Check if this specific repository is indexed
+        indexed_repo = state.get("repository")
         indexed = bool(
-            indexed_project == project_name
+            indexed_repo == repo_name
             and (state.get("indexed_commit") or state.get("file_hashes"))
         )
 
@@ -101,25 +101,25 @@ def orient_session(
                 )
 
         # Fetch skeleton
-        skeleton_data = _fetch_skeleton(collection, project_name, current_branch)
+        skeleton_data = _fetch_skeleton(collection, repo_name, current_branch)
 
         # Fetch tech_stack
-        tech_stack = _fetch_tech_stack(collection, project_name)
+        tech_stack = _fetch_tech_stack(collection, repo_name)
 
         # Fetch focused initiative (new format with stale detection)
-        focused_initiative = _fetch_focused_initiative(collection, project_name)
+        focused_initiative = _fetch_focused_initiative(collection, repo_name)
 
         # Fetch all active initiatives
-        active_initiatives = _fetch_active_initiatives(collection, project_name)
+        active_initiatives = _fetch_active_initiatives(collection, repo_name)
 
         # Fallback to legacy initiative if no new-format initiatives
         legacy_initiative = None
         if not focused_initiative and not active_initiatives:
-            legacy_initiative = _fetch_initiative(collection, project_name)
+            legacy_initiative = _fetch_initiative(collection, repo_name)
 
         # Build response
         response = {
-            "project": project_name,
+            "repository": repo_name,
             "branch": current_branch,
             "indexed": indexed,
             "last_indexed": last_indexed or "never",
@@ -163,21 +163,21 @@ def orient_session(
 
 
 def _fetch_skeleton(
-    collection, project_name: str, branch: str
+    collection, repo_name: str, branch: str
 ) -> Optional[dict]:
     """Fetch skeleton data from collection."""
     try:
         # Try current branch first
-        skeleton_id = f"{project_name}:skeleton:{branch}"
+        skeleton_id = f"{repo_name}:skeleton:{branch}"
         result = collection.get(
             ids=[skeleton_id],
             include=["documents", "metadatas"],
         )
 
         if not result["documents"]:
-            # Fallback: any skeleton for this project
+            # Fallback: any skeleton for this repository
             fallback = collection.get(
-                where={"$and": [{"type": "skeleton"}, {"project": project_name}]},
+                where={"$and": [{"type": "skeleton"}, {"repository": repo_name}]},
                 include=["documents", "metadatas"],
             )
             if fallback["documents"]:
@@ -200,10 +200,10 @@ def _fetch_skeleton(
     return None
 
 
-def _fetch_tech_stack(collection, project_name: str) -> Optional[str]:
+def _fetch_tech_stack(collection, repo_name: str) -> Optional[str]:
     """Fetch tech stack context from collection."""
     try:
-        tech_stack_id = f"{project_name}:tech_stack"
+        tech_stack_id = f"{repo_name}:tech_stack"
         result = collection.get(
             ids=[tech_stack_id],
             include=["documents"],
@@ -216,10 +216,10 @@ def _fetch_tech_stack(collection, project_name: str) -> Optional[str]:
     return None
 
 
-def _fetch_initiative(collection, project_name: str) -> Optional[dict]:
+def _fetch_initiative(collection, repo_name: str) -> Optional[dict]:
     """Fetch active initiative from collection (legacy format)."""
     try:
-        initiative_id = f"{project_name}:initiative"
+        initiative_id = f"{repo_name}:initiative"
         result = collection.get(
             ids=[initiative_id],
             include=["documents", "metadatas"],
@@ -236,13 +236,13 @@ def _fetch_initiative(collection, project_name: str) -> Optional[dict]:
     return None
 
 
-def _fetch_focused_initiative(collection, project_name: str) -> Optional[dict]:
+def _fetch_focused_initiative(collection, repo_name: str) -> Optional[dict]:
     """Fetch focused initiative with stale detection."""
     try:
         from src.tools.initiatives import check_initiative_staleness, STALE_THRESHOLD_DAYS
 
         # Get focus document
-        focus_id = f"{project_name}:focus"
+        focus_id = f"{repo_name}:focus"
         focus_result = collection.get(
             ids=[focus_id],
             include=["metadatas"],
@@ -289,14 +289,14 @@ def _fetch_focused_initiative(collection, project_name: str) -> Optional[dict]:
     return None
 
 
-def _fetch_active_initiatives(collection, project_name: str) -> list:
-    """Fetch all active (non-completed) initiatives for a project."""
+def _fetch_active_initiatives(collection, repo_name: str) -> list:
+    """Fetch all active (non-completed) initiatives for a repository."""
     try:
         result = collection.get(
             where={
                 "$and": [
                     {"type": "initiative"},
-                    {"repository": project_name},
+                    {"repository": repo_name},
                     {"status": "active"},
                 ]
             },

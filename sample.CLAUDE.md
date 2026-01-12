@@ -2,12 +2,12 @@
 
 | Command | What it does |
 |---------|--------------|
-| `cortex>> orient` | Start session - check index status, get project context, see active initiative |
+| `cortex>> orient` | Start session - check index status, get repository context, see active initiative |
 | `cortex>> search <query>` | Search memory for code, notes, decisions |
 | `cortex>> save <content>` | Save a note, decision, or learning |
 | `cortex>> ingest <path>` | Index a codebase into memory |
 | `cortex>> ingest <path> --include "src/**"` | Selective ingestion (only matching paths) |
-| `cortex>> skeleton` | Show project file structure |
+| `cortex>> skeleton` | Show repository file structure |
 | `cortex>> status` | Check if Cortex daemon is running |
 | `cortex>> commit` | Use `commit_to_cortex` |
 

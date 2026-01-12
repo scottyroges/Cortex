@@ -346,7 +346,7 @@ class TestIngestion:
         doc_ids = ingest_file(
             file_path=sample_python_file,
             collection=collection,
-            project_id="test",
+            repo_id="test",
             branch="main",
             header_provider="none",  # Skip LLM headers for testing
         )
@@ -367,7 +367,7 @@ class TestIngestion:
         ingest_file(
             file_path=sample_python_file,
             collection=collection,
-            project_id="myproject",
+            repo_id="myproject",
             branch="feature",
             header_provider="none",
         )
@@ -375,7 +375,7 @@ class TestIngestion:
         results = collection.get(include=["metadatas"])
 
         for meta in results["metadatas"]:
-            assert meta["project"] == "myproject"
+            assert meta["repository"] == "myproject"
             assert meta["branch"] == "feature"
             assert meta["language"] == "python"
             assert meta["type"] == "code"
@@ -389,7 +389,7 @@ class TestIngestion:
         ingest_file(
             file_path=file_with_secrets,
             collection=collection,
-            project_id="test",
+            repo_id="test",
             branch="main",
             header_provider="none",
         )
@@ -418,7 +418,7 @@ class TestIngestion:
         stats = ingest_codebase(
             root_path=str(temp_dir),
             collection=collection,
-            project_id="myproject",
+            repo_id="myproject",
             header_provider="none",
             state_file=state_file,
         )
@@ -518,7 +518,7 @@ class TestIngestion:
         doc_ids = ingest_file(
             file_path=temp_dir / "empty.py",
             collection=collection,
-            project_id="test",
+            repo_id="test",
             branch="main",
             header_provider="none",
         )
@@ -639,7 +639,7 @@ class TestSkeleton:
         doc_id = store_skeleton(
             collection=collection,
             tree_output=tree,
-            project_id="myproject",
+            repo_id="myproject",
             branch="main",
             stats=stats,
         )
@@ -651,7 +651,7 @@ class TestSkeleton:
         assert len(result["documents"]) == 1
         assert result["documents"][0] == tree
         assert result["metadatas"][0]["type"] == "skeleton"
-        assert result["metadatas"][0]["project"] == "myproject"
+        assert result["metadatas"][0]["repository"] == "myproject"
         assert result["metadatas"][0]["branch"] == "main"
         assert result["metadatas"][0]["total_files"] == 2
 
@@ -671,7 +671,7 @@ class TestSkeleton:
         stats = ingest_codebase(
             root_path=str(temp_dir),
             collection=collection,
-            project_id="myproject",
+            repo_id="myproject",
             state_file=state_file,
         )
 
@@ -681,7 +681,7 @@ class TestSkeleton:
 
         # Verify skeleton is stored
         skeleton_result = collection.get(
-            where={"$and": [{"type": "skeleton"}, {"project": "myproject"}]},
+            where={"$and": [{"type": "skeleton"}, {"repository": "myproject"}]},
             include=["documents", "metadatas"],
         )
         assert len(skeleton_result["documents"]) == 1
@@ -924,9 +924,9 @@ class TestGarbageCollection:
             ids=["proj:file1.py:0", "proj:file1.py:1", "proj:file2.py:0"],
             documents=["chunk 1", "chunk 2", "chunk 3"],
             metadatas=[
-                {"file_path": "/path/to/file1.py", "project": "proj", "type": "code"},
-                {"file_path": "/path/to/file1.py", "project": "proj", "type": "code"},
-                {"file_path": "/path/to/file2.py", "project": "proj", "type": "code"},
+                {"file_path": "/path/to/file1.py", "repository": "proj", "type": "code"},
+                {"file_path": "/path/to/file1.py", "repository": "proj", "type": "code"},
+                {"file_path": "/path/to/file2.py", "repository": "proj", "type": "code"},
             ],
         )
 
@@ -1004,7 +1004,7 @@ class TestStateFormat:
         # Verify new format
         assert "file_hashes" in new_state
         assert "indexed_at" in new_state
-        assert "project" in new_state
+        assert "repository" in new_state
 
     def test_atomic_state_write(self, temp_dir: Path):
         """Test that state writes are atomic."""
@@ -1234,7 +1234,7 @@ generated.py
         stats = ingest_codebase(
             root_path=str(code_dir),
             collection=collection,
-            project_id="test",
+            repo_id="test",
             header_provider="none",
             state_file=state_file,
             include_patterns=["src/**"],

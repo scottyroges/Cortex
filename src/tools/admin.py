@@ -135,27 +135,27 @@ def get_cortex_version(expected_commit: Optional[str] = None) -> str:
 
 
 def get_skeleton(
-    project: Optional[str] = None,
+    repository: Optional[str] = None,
 ) -> str:
     """
-    Get the file tree structure for a project.
+    Get the file tree structure for a repository.
 
     Returns the stored skeleton (tree output) for file-path grounding.
     The skeleton is auto-generated during ingest_code_into_cortex.
 
     Args:
-        project: Project name (required)
+        repository: Repository name (required)
 
     Returns:
         JSON with tree structure and metadata
     """
-    if not project:
+    if not repository:
         return json.dumps({
-            "error": "Project name is required",
-            "hint": "Provide the project name used during ingestion",
+            "error": "Repository name is required",
+            "hint": "Provide the repository name used during ingestion",
         })
 
-    logger.info(f"Getting skeleton for project: {project}")
+    logger.info(f"Getting skeleton for repository: {repository}")
 
     try:
         collection = get_collection()
@@ -163,13 +163,13 @@ def get_skeleton(
         branch = get_current_branch(repo_path) if repo_path else "unknown"
 
         # Try current branch first, then fall back to any branch
-        doc_id = f"{project}:skeleton:{branch}"
+        doc_id = f"{repository}:skeleton:{branch}"
         result = collection.get(ids=[doc_id], include=["documents", "metadatas"])
 
         if not result["documents"]:
             # Try to find skeleton for any branch
             all_results = collection.get(
-                where={"$and": [{"type": "skeleton"}, {"project": project}]},
+                where={"$and": [{"type": "skeleton"}, {"repository": repository}]},
                 include=["documents", "metadatas"],
             )
             if all_results["documents"]:
@@ -180,7 +180,7 @@ def get_skeleton(
 
         if not result["documents"]:
             return json.dumps({
-                "error": f"No skeleton found for project '{project}'",
+                "error": f"No skeleton found for repository '{repository}'",
                 "hint": "Run ingest_code_into_cortex first to generate the skeleton",
             })
 
@@ -190,7 +190,7 @@ def get_skeleton(
         logger.info(f"Skeleton found: {metadata.get('total_files', 0)} files, {metadata.get('total_dirs', 0)} dirs")
 
         return json.dumps({
-            "project": project,
+            "repository": repository,
             "branch": metadata.get("branch", "unknown"),
             "generated_at": metadata.get("generated_at", "unknown"),
             "total_files": metadata.get("total_files", 0),

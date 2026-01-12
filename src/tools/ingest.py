@@ -17,7 +17,7 @@ logger = get_logger("tools.ingest")
 
 def ingest_code_into_cortex(
     path: str,
-    project_name: Optional[str] = None,
+    repository: Optional[str] = None,
     force_full: bool = False,
     include_patterns: Optional[list[str]] = None,
     use_cortexignore: bool = True,
@@ -30,7 +30,7 @@ def ingest_code_into_cortex(
 
     Args:
         path: Absolute path to the codebase root directory
-        project_name: Optional project identifier (defaults to directory name)
+        repository: Optional repository identifier (defaults to directory name)
         force_full: Force full re-ingestion, ignoring delta sync
         include_patterns: If provided, only files matching at least one glob pattern are indexed.
                           Patterns are relative to path (e.g., ["src/**", "tests/**"])
@@ -40,7 +40,7 @@ def ingest_code_into_cortex(
     Returns:
         JSON with ingestion statistics
     """
-    logger.info(f"Ingesting codebase: path={path}, project={project_name}, force_full={force_full}, include_patterns={include_patterns}")
+    logger.info(f"Ingesting codebase: path={path}, repository={repository}, force_full={force_full}, include_patterns={include_patterns}")
     start_time = time.time()
 
     try:
@@ -50,7 +50,7 @@ def ingest_code_into_cortex(
         stats = ingest_codebase(
             root_path=path,
             collection=collection,
-            project_id=project_name,
+            repo_id=repository,
             anthropic_client=anthropic,
             force_full=force_full,
             header_provider=CONFIG["header_provider"],

@@ -16,7 +16,7 @@ logger = get_logger("storage.gc")
 def delete_file_chunks(
     collection: chromadb.Collection,
     file_paths: list[str],
-    project_id: str,
+    repo_id: str,
 ) -> int:
     """
     Delete all chunks for the given file paths from ChromaDB.
@@ -24,7 +24,7 @@ def delete_file_chunks(
     Args:
         collection: ChromaDB collection
         file_paths: List of file paths to delete chunks for
-        project_id: Project identifier
+        repo_id: Repository identifier
 
     Returns:
         Number of chunks deleted
@@ -40,7 +40,7 @@ def delete_file_chunks(
                 where={
                     "$and": [
                         {"file_path": file_path},
-                        {"project": project_id},
+                        {"repository": repo_id},
                     ]
                 },
                 include=[],  # We only need IDs

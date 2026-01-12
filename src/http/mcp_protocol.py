@@ -55,7 +55,6 @@ MCP_TOOL_SCHEMAS = [
             "type": "object",
             "properties": {
                 "query": {"type": "string", "description": "Natural language search query"},
-                "project": {"type": "string", "description": "Optional project filter (deprecated, use repository)"},
                 "repository": {"type": "string", "description": "Repository identifier for filtering"},
                 "min_score": {"type": "number", "description": "Minimum relevance score (0-1)"},
                 "branch": {"type": "string", "description": "Optional branch filter"},
@@ -72,7 +71,7 @@ MCP_TOOL_SCHEMAS = [
             "type": "object",
             "properties": {
                 "path": {"type": "string", "description": "Absolute path to codebase root"},
-                "project_name": {"type": "string", "description": "Optional project identifier"},
+                "repository": {"type": "string", "description": "Optional repository identifier (defaults to directory name)"},
                 "force_full": {"type": "boolean", "default": False, "description": "Force full re-ingestion"},
                 "include_patterns": {
                     "type": "array",
@@ -82,7 +81,7 @@ MCP_TOOL_SCHEMAS = [
                 "use_cortexignore": {
                     "type": "boolean",
                     "default": True,
-                    "description": "Load ignore patterns from global ~/.cortex/cortexignore and project .cortexignore files",
+                    "description": "Load ignore patterns from global ~/.cortex/cortexignore and .cortexignore files",
                 },
             },
             "required": ["path"],
@@ -96,7 +95,6 @@ MCP_TOOL_SCHEMAS = [
             "properties": {
                 "summary": {"type": "string", "description": "Detailed summary of the session: what changed, why, decisions made, problems solved, and future TODOs"},
                 "changed_files": {"type": "array", "items": {"type": "string"}, "description": "List of modified file paths"},
-                "project": {"type": "string", "description": "Project identifier (deprecated, use repository)"},
                 "repository": {"type": "string", "description": "Repository identifier"},
                 "initiative": {"type": "string", "description": "Initiative ID or name to tag (uses focused initiative if not specified)"},
             },
@@ -112,7 +110,6 @@ MCP_TOOL_SCHEMAS = [
                 "content": {"type": "string", "description": "Note content"},
                 "title": {"type": "string", "description": "Optional title"},
                 "tags": {"type": "array", "items": {"type": "string"}, "description": "Optional tags"},
-                "project": {"type": "string", "description": "Associated project (deprecated, use repository)"},
                 "repository": {"type": "string", "description": "Repository identifier"},
                 "initiative": {"type": "string", "description": "Initiative ID or name to tag (uses focused initiative if not specified)"},
             },
@@ -295,11 +292,11 @@ MCP_TOOL_SCHEMAS = [
     },
     {
         "name": "get_skeleton",
-        "description": "Get the file tree structure for a project.",
+        "description": "Get the file tree structure for a repository.",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "project": {"type": "string", "description": "Project name"},
+                "repository": {"type": "string", "description": "Repository name"},
             },
         },
     },

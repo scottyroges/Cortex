@@ -55,9 +55,9 @@ class TestSearchEndpoint:
             ],
             ids=["doc1", "doc2", "doc3"],
             metadatas=[
-                {"file_path": "/app/auth.py", "project": "test", "branch": "main", "type": "code", "language": "python"},
-                {"file_path": "/app/validate.js", "project": "test", "branch": "main", "type": "code", "language": "javascript"},
-                {"file_path": "/app/hash.rs", "project": "test", "branch": "main", "type": "code", "language": "rust"},
+                {"file_path": "/app/auth.py", "repository": "test", "branch": "main", "type": "code", "language": "python"},
+                {"file_path": "/app/validate.js", "repository": "test", "branch": "main", "type": "code", "language": "javascript"},
+                {"file_path": "/app/hash.rs", "repository": "test", "branch": "main", "type": "code", "language": "rust"},
             ],
         )
 
@@ -80,7 +80,7 @@ class TestSearchEndpoint:
             collection.add(
                 documents=[f"Document about authentication method {i}"],
                 ids=[f"auth-doc-{i}"],
-                metadatas=[{"project": "test", "branch": "main", "type": "note", "title": "", "tags": ""}],
+                metadatas=[{"repository": "test", "branch": "main", "type": "note", "title": "", "tags": ""}],
             )
 
         response = api_client.get("/search", params={"q": "authentication", "limit": 3})
@@ -101,18 +101,18 @@ class TestSearchEndpoint:
             ],
             ids=["alpha-1", "beta-1"],
             metadatas=[
-                {"project": "alpha", "branch": "main", "type": "code", "file_path": "/a.py", "language": "python"},
-                {"project": "beta", "branch": "main", "type": "code", "file_path": "/b.py", "language": "python"},
+                {"repository": "alpha", "branch": "main", "type": "code", "file_path": "/a.py", "language": "python"},
+                {"repository": "beta", "branch": "main", "type": "code", "file_path": "/b.py", "language": "python"},
             ],
         )
 
-        response = api_client.get("/search", params={"q": "API endpoint", "project": "alpha"})
+        response = api_client.get("/search", params={"q": "API endpoint", "repository": "alpha"})
 
         assert response.status_code == 200
         data = response.json()
         # All results should be from alpha project
         for result in data["results"]:
-            assert result["metadata"]["project"] == "alpha"
+            assert result["metadata"]["repository"] == "alpha"
 
     def test_search_with_min_score(self, api_client, temp_chroma_client):
         """Test search filters by minimum score."""
@@ -122,7 +122,7 @@ class TestSearchEndpoint:
         collection.add(
             documents=["Exact match for authentication"],
             ids=["exact-1"],
-            metadatas=[{"project": "test", "branch": "main", "type": "note", "title": "", "tags": ""}],
+            metadatas=[{"repository": "test", "branch": "main", "type": "note", "title": "", "tags": ""}],
         )
 
         # High min_score should filter out low-quality matches
@@ -205,7 +205,7 @@ class TestNoteEndpoint:
             "/note",
             json={
                 "content": "Project-specific documentation.",
-                "project": "my-custom-project"
+                "repository": "my-custom-project"
             }
         )
 

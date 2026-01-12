@@ -34,7 +34,6 @@ def save_note_to_cortex(
     content: str,
     title: Optional[str] = None,
     tags: Optional[list[str]] = None,
-    project: Optional[str] = None,
     repository: Optional[str] = None,
     initiative: Optional[str] = None,
 ) -> str:
@@ -45,15 +44,13 @@ def save_note_to_cortex(
         content: The note content
         title: Optional title for the note
         tags: Optional list of tags for categorization
-        project: Associated project identifier (deprecated, use repository)
         repository: Repository identifier
         initiative: Initiative ID/name to tag (uses focused initiative if not specified)
 
     Returns:
         JSON with note ID and save status
     """
-    # Handle project/repository naming transition
-    repo = repository or project or "global"
+    repo = repository or "global"
 
     logger.info(f"Saving note: title='{title}', repository={repo}")
 
@@ -99,7 +96,6 @@ def save_note_to_cortex(
             "title": title or "",
             "tags": json.dumps(tags) if tags else "[]",
             "repository": repo,
-            "project": repo,  # Keep for backwards compatibility
             "branch": branch,
             "created_at": timestamp,
         }
@@ -145,7 +141,6 @@ def save_note_to_cortex(
 def commit_to_cortex(
     summary: str,
     changed_files: list[str],
-    project: Optional[str] = None,
     repository: Optional[str] = None,
     initiative: Optional[str] = None,
 ) -> str:
@@ -158,15 +153,13 @@ def commit_to_cortex(
     Args:
         summary: Summary of the session/changes made
         changed_files: List of file paths that were modified
-        project: Project identifier (deprecated, use repository)
         repository: Repository identifier
         initiative: Initiative ID/name to tag (uses focused initiative if not specified)
 
     Returns:
         JSON with commit status, re-indexing stats, and initiative info
     """
-    # Handle project/repository naming transition
-    repo = repository or project or "global"
+    repo = repository or "global"
 
     logger.info(f"Committing to Cortex: {len(changed_files)} files, repository={repo}")
 
@@ -208,7 +201,6 @@ def commit_to_cortex(
         metadata = {
             "type": "commit",
             "repository": repo,
-            "project": repo,  # Keep for backwards compatibility
             "branch": branch,
             "files": json.dumps(changed_files),
             "created_at": timestamp,
@@ -233,7 +225,7 @@ def commit_to_cortex(
         reindex_stats = ingest_files(
             file_paths=changed_files,
             collection=collection,
-            project_id=repo,
+            repo_id=repo,
             anthropic_client=anthropic,
             header_provider=CONFIG["header_provider"],
         )
@@ -381,7 +373,6 @@ def insight_to_cortex(
             "files": json.dumps(files),
             "tags": json.dumps(tags) if tags else "[]",
             "repository": repo,
-            "project": repo,  # Keep for backwards compatibility
             "branch": branch,
             "created_at": timestamp,
         }

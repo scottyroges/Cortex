@@ -28,9 +28,9 @@ class TestSearchCortex:
             ],
             ids=["1", "2", "3"],
             metadatas=[
-                {"file_path": "/test/fib.py", "project": "test", "branch": "main", "language": "python"},
-                {"file_path": "/test/auth.js", "project": "test", "branch": "main", "language": "javascript"},
-                {"file_path": "/test/hashmap.rs", "project": "test", "branch": "main", "language": "rust"},
+                {"file_path": "/test/fib.py", "repository": "test", "branch": "main", "language": "python"},
+                {"file_path": "/test/auth.js", "repository": "test", "branch": "main", "language": "javascript"},
+                {"file_path": "/test/hashmap.rs", "repository": "test", "branch": "main", "language": "rust"},
             ],
         )
 
@@ -99,7 +99,7 @@ class TestIngestCodeIntoCortex:
         stats = ingest_codebase(
             root_path=str(temp_dir),
             collection=collection,
-            project_id="testproject",
+            repo_id="testproject",
             header_provider="none",
             state_file=state_file,
         )
@@ -113,7 +113,7 @@ class TestIngestCodeIntoCortex:
 
         # All should have the correct project
         for meta in results["metadatas"]:
-            assert meta["project"] == "testproject"
+            assert meta["repository"] == "testproject"
 
     def test_ingest_respects_force_full(self, temp_dir: Path, temp_chroma_client):
         """Test that force_full re-ingests everything."""
@@ -179,7 +179,7 @@ class TestCommitToCortex:
             documents=[f"Session Summary:\n\n{scrub_secrets(summary)}\n\nChanged files: {', '.join(changed_files)}"],
             metadatas=[{
                 "type": "commit",
-                "project": "test",
+                "repository": "test",
                 "branch": "main",
                 "files": json.dumps(changed_files),
             }],
@@ -219,7 +219,7 @@ class TestSaveNoteToCortex:
                 "type": "note",
                 "title": title,
                 "tags": ",".join(tags),
-                "project": "myproject",
+                "repository": "myproject",
                 "branch": "main",
             }],
         )
@@ -246,7 +246,7 @@ class TestSaveNoteToCortex:
         collection.upsert(
             ids=[note_id],
             documents=[scrub_secrets(content)],
-            metadatas=[{"type": "note", "project": "test", "branch": "main", "title": "", "tags": ""}],
+            metadatas=[{"type": "note", "repository": "test", "branch": "main", "title": "", "tags": ""}],
         )
 
         results = collection.get(ids=[note_id], include=["documents"])
@@ -553,7 +553,7 @@ class TestContextTools:
             metadatas=[{
                 "type": "code",
                 "file_path": "/app/utils.py",
-                "project": repository,
+                "repository": repository,
                 "branch": "main",
                 "language": "python",
             }],
@@ -783,7 +783,7 @@ def validate_input(value):
         stats = ingest_codebase(
             root_path=str(temp_dir),
             collection=collection,
-            project_id="testcalc",
+            repo_id="testcalc",
             header_provider="none",
             state_file=state_file,
         )
@@ -825,7 +825,7 @@ def validate_input(value):
         collection.upsert(
             ids=[note_id],
             documents=["Architecture Decision: Use Redis for caching to improve API response times"],
-            metadatas=[{"type": "note", "project": "test", "branch": "main", "title": "", "tags": ""}],
+            metadatas=[{"type": "note", "repository": "test", "branch": "main", "title": "", "tags": ""}],
         )
 
         # Search for it
@@ -852,12 +852,12 @@ class TestBranchAwareFilter:
         """Test filter construction with project and branch list."""
         from src.tools.search import build_branch_aware_filter
 
-        result = build_branch_aware_filter(project="myproject", branches=["feature-x", "main"])
+        result = build_branch_aware_filter(repository="myproject", branches=["feature-x", "main"])
 
         assert result is not None
         assert "$and" in result
         # Should have project filter and branch filter combined
-        assert {"project": "myproject"} in result["$and"]
+        assert {"repository": "myproject"} in result["$and"]
 
         # Find the $or clause
         or_clause = None
@@ -876,49 +876,49 @@ class TestBranchAwareFilter:
         """Test that unknown branch returns simple project filter."""
         from src.tools.search import build_branch_aware_filter
 
-        result = build_branch_aware_filter(project="myproject", branches=["unknown"])
+        result = build_branch_aware_filter(repository="myproject", branches=["unknown"])
 
         # Should fall back to simple project filter
-        assert result == {"project": "myproject"}
+        assert result == {"repository": "myproject"}
 
     def test_filter_with_no_branches(self):
         """Test that empty branches returns simple project filter."""
         from src.tools.search import build_branch_aware_filter
 
-        result = build_branch_aware_filter(project="myproject", branches=None)
-        assert result == {"project": "myproject"}
+        result = build_branch_aware_filter(repository="myproject", branches=None)
+        assert result == {"repository": "myproject"}
 
-        result = build_branch_aware_filter(project="myproject", branches=[])
-        assert result == {"project": "myproject"}
+        result = build_branch_aware_filter(repository="myproject", branches=[])
+        assert result == {"repository": "myproject"}
 
     def test_filter_without_project(self):
         """Test filter with branches but no project."""
         from src.tools.search import build_branch_aware_filter
 
-        result = build_branch_aware_filter(project=None, branches=["main"])
+        result = build_branch_aware_filter(repository=None, branches=["main"])
 
         assert result is not None
         assert "$or" in result
         # Should only have branch filter, no project
         assert "$and" not in result or not any(
-            "project" in item for item in result.get("$and", [])
+            "repository" in item for item in result.get("$and", [])
         )
 
     def test_filter_returns_none_when_no_filters(self):
         """Test that no project and unknown branch returns None."""
         from src.tools.search import build_branch_aware_filter
 
-        result = build_branch_aware_filter(project=None, branches=["unknown"])
+        result = build_branch_aware_filter(repository=None, branches=["unknown"])
         assert result is None
 
-        result = build_branch_aware_filter(project=None, branches=None)
+        result = build_branch_aware_filter(repository=None, branches=None)
         assert result is None
 
     def test_filter_code_types_filtered_by_branch(self):
         """Test that code and skeleton types are in the branch-filtered clause."""
         from src.tools.search import build_branch_aware_filter
 
-        result = build_branch_aware_filter(project=None, branches=["feature", "main"])
+        result = build_branch_aware_filter(repository=None, branches=["feature", "main"])
 
         # Find the branch-filtered clause
         or_clauses = result["$or"]
@@ -944,7 +944,7 @@ class TestBranchAwareFilter:
         """Test that note, commit, tech_stack, initiative are not branch-filtered."""
         from src.tools.search import build_branch_aware_filter
 
-        result = build_branch_aware_filter(project=None, branches=["feature", "main"])
+        result = build_branch_aware_filter(repository=None, branches=["feature", "main"])
 
         # Find the non-filtered clause
         or_clauses = result["$or"]
@@ -1006,14 +1006,14 @@ class TestBranchAwareSearch:
             ],
             ids=["code-feature-1", "code-main-1", "code-main-2"],
             metadatas=[
-                {"type": "code", "file_path": "/src/order.js", "project": "test", "branch": "feature-x", "language": "javascript"},
-                {"type": "code", "file_path": "/src/order.js", "project": "test", "branch": "main", "language": "javascript"},
-                {"type": "code", "file_path": "/src/utils.js", "project": "test", "branch": "main", "language": "javascript"},
+                {"type": "code", "file_path": "/src/order.js", "repository": "test", "branch": "feature-x", "language": "javascript"},
+                {"type": "code", "file_path": "/src/order.js", "repository": "test", "branch": "main", "language": "javascript"},
+                {"type": "code", "file_path": "/src/utils.js", "repository": "test", "branch": "main", "language": "javascript"},
             ],
         )
 
         # Search with branch filter for "feature-x" branch (should include feature-x + main)
-        where_filter = build_branch_aware_filter(project="test", branches=["feature-x", "main"])
+        where_filter = build_branch_aware_filter(repository="test", branches=["feature-x", "main"])
         searcher = HybridSearcher(collection)
         searcher.build_index(where_filter)
 
@@ -1038,12 +1038,12 @@ class TestBranchAwareSearch:
             ],
             ids=["note-1"],
             metadatas=[
-                {"type": "note", "project": "test", "branch": "main", "title": "DB Choice", "tags": "[]"},
+                {"type": "note", "repository": "test", "branch": "main", "title": "DB Choice", "tags": "[]"},
             ],
         )
 
         # Search from a different branch - note should still be visible
-        where_filter = build_branch_aware_filter(project="test", branches=["feature-x", "main"])
+        where_filter = build_branch_aware_filter(repository="test", branches=["feature-x", "main"])
         searcher = HybridSearcher(collection)
         searcher.build_index(where_filter)
 
@@ -1068,12 +1068,12 @@ class TestBranchAwareSearch:
             ],
             ids=["commit-1"],
             metadatas=[
-                {"type": "commit", "project": "test", "branch": "main", "files": "[]"},
+                {"type": "commit", "repository": "test", "branch": "main", "files": "[]"},
             ],
         )
 
         # Search from a different branch - commit should still be visible
-        where_filter = build_branch_aware_filter(project="test", branches=["feature-y"])
+        where_filter = build_branch_aware_filter(repository="test", branches=["feature-y"])
         searcher = HybridSearcher(collection)
         searcher.build_index(where_filter)
 
@@ -1098,12 +1098,12 @@ class TestBranchAwareSearch:
             ],
             ids=["code-feature-only"],
             metadatas=[
-                {"type": "code", "file_path": "/src/feature.js", "project": "test", "branch": "feature-x", "language": "javascript"},
+                {"type": "code", "file_path": "/src/feature.js", "repository": "test", "branch": "feature-x", "language": "javascript"},
             ],
         )
 
         # Search from feature-y branch (should NOT include feature-x code)
-        where_filter = build_branch_aware_filter(project="test", branches=["feature-y", "main"])
+        where_filter = build_branch_aware_filter(repository="test", branches=["feature-y", "main"])
         searcher = HybridSearcher(collection)
         searcher.build_index(where_filter)
 
@@ -1129,12 +1129,12 @@ class TestBranchAwareSearch:
             ],
             ids=["code-main-core"],
             metadatas=[
-                {"type": "code", "file_path": "/src/core.js", "project": "test", "branch": "main", "language": "javascript"},
+                {"type": "code", "file_path": "/src/core.js", "repository": "test", "branch": "main", "language": "javascript"},
             ],
         )
 
         # Search from feature branch (should include main)
-        where_filter = build_branch_aware_filter(project="test", branches=["feature-x", "main"])
+        where_filter = build_branch_aware_filter(repository="test", branches=["feature-x", "main"])
         searcher = HybridSearcher(collection)
         searcher.build_index(where_filter)
 

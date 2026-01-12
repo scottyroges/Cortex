@@ -54,7 +54,7 @@ def debug_stats() -> dict[str, Any]:
     """
     Get collection statistics.
 
-    Returns counts by project, type, and language.
+    Returns counts by repository, type, and language.
     """
     logger.info("Debug stats requested")
     collection = get_collection()
@@ -64,15 +64,15 @@ def debug_stats() -> dict[str, Any]:
 
     stats = {
         "total_documents": len(results["ids"]),
-        "by_project": {},
+        "by_repository": {},
         "by_type": {},
         "by_language": {},
     }
 
     for meta in results["metadatas"]:
-        # Count by project
-        project = meta.get("project", "unknown")
-        stats["by_project"][project] = stats["by_project"].get(project, 0) + 1
+        # Count by repository
+        repository = meta.get("repository", "unknown")
+        stats["by_repository"][repository] = stats["by_repository"].get(repository, 0) + 1
 
         # Count by type
         doc_type = meta.get("type", "unknown")
@@ -120,7 +120,7 @@ def debug_sample(limit: int = Query(default=10, le=100)) -> list[dict[str, Any]]
 
 @router.get("/list")
 def debug_list(
-    project: Optional[str] = None,
+    repository: Optional[str] = None,
     doc_type: Optional[str] = Query(default=None, alias="type"),
     limit: int = Query(default=50, le=500),
 ) -> list[dict[str, Any]]:
@@ -128,19 +128,19 @@ def debug_list(
     List documents with optional filtering.
 
     Args:
-        project: Filter by project name
+        repository: Filter by repository name
         type: Filter by document type (code, note, commit)
         limit: Maximum results
     """
-    logger.info(f"Debug list requested: project={project}, type={doc_type}")
+    logger.info(f"Debug list requested: repository={repository}, type={doc_type}")
     collection = get_collection()
 
     # Build where filter
     where_filter = None
-    if project or doc_type:
+    if repository or doc_type:
         conditions = []
-        if project:
-            conditions.append({"project": project})
+        if repository:
+            conditions.append({"repository": repository})
         if doc_type:
             conditions.append({"type": doc_type})
 

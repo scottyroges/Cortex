@@ -28,7 +28,7 @@ logger = get_logger("ingest.engine")
 def ingest_file(
     file_path: Path,
     collection: chromadb.Collection,
-    project_id: str,
+    repo_id: str,
     branch: str,
     anthropic_client: Optional[Anthropic] = None,
     header_provider: str = "none",
@@ -41,7 +41,7 @@ def ingest_file(
     Args:
         file_path: Path to the file
         collection: ChromaDB collection
-        project_id: Project identifier
+        repo_id: Repository identifier
         branch: Git branch name
         anthropic_client: Anthropic client (for "anthropic" header provider)
         header_provider: One of "anthropic", "claude-cli", or "none"
@@ -94,12 +94,12 @@ def ingest_file(
         full_text = f"{header}\n\n---\n\n{chunk}"
 
         # Create document ID
-        doc_id = f"{project_id}:{path_str}:{i}"
+        doc_id = f"{repo_id}:{path_str}:{i}"
 
         # Build metadata with scope info
         metadata = {
             "file_path": path_str,
-            "project": project_id,
+            "repository": repo_id,
             "branch": branch,
             "chunk_index": i,
             "total_chunks": len(chunks),
@@ -131,7 +131,7 @@ def ingest_file(
 def ingest_codebase(
     root_path: str,
     collection: chromadb.Collection,
-    project_id: Optional[str] = None,
+    repo_id: Optional[str] = None,
     anthropic_client: Optional[Anthropic] = None,
     force_full: bool = False,
     header_provider: str = "none",
@@ -152,7 +152,7 @@ def ingest_codebase(
     Args:
         root_path: Root directory to ingest
         collection: ChromaDB collection to add documents to
-        project_id: Project identifier (defaults to directory name)
+        repo_id: Repository identifier (defaults to directory name)
         anthropic_client: Anthropic client (for "anthropic" header provider)
         force_full: Force full re-ingestion (ignore delta sync)
         header_provider: One of "anthropic", "claude-cli", or "none"
@@ -166,13 +166,13 @@ def ingest_codebase(
     """
     start_time = time.time()
     root = Path(root_path)
-    project_id = project_id or root.name
+    repo_id = repo_id or root.name
     branch = get_current_branch(root_path)
 
-    logger.info(f"Starting ingestion: {root_path} (project={project_id}, branch={branch})")
+    logger.info(f"Starting ingestion: {root_path} (repository={repo_id}, branch={branch})")
 
     stats = {
-        "project": project_id,
+        "repository": repo_id,
         "branch": branch,
         "files_scanned": 0,
         "files_processed": 0,
@@ -260,7 +260,7 @@ def ingest_codebase(
     # --- Garbage Collection ---
     # Handle deleted files: remove their chunks from ChromaDB
     if deleted_files:
-        chunks_deleted = delete_file_chunks(collection, deleted_files, project_id)
+        chunks_deleted = delete_file_chunks(collection, deleted_files, repo_id)
         stats["files_deleted"] = len(deleted_files)
         stats["chunks_deleted"] = chunks_deleted
         cleanup_state_entries(state, deleted_files)
@@ -269,7 +269,7 @@ def ingest_codebase(
     # Handle renamed files: delete chunks at old paths
     if renamed_files:
         old_paths = [old for old, new in renamed_files]
-        chunks_deleted = delete_file_chunks(collection, old_paths, project_id)
+        chunks_deleted = delete_file_chunks(collection, old_paths, repo_id)
         stats["chunks_deleted"] += chunks_deleted
         cleanup_state_entries(state, old_paths)
         logger.info(f"Cleaned up {len(renamed_files)} renamed files")
@@ -282,7 +282,7 @@ def ingest_codebase(
             doc_ids = ingest_file(
                 file_path=file_path,
                 collection=collection,
-                project_id=project_id,
+                repo_id=repo_id,
                 branch=branch,
                 anthropic_client=anthropic_client,
                 header_provider=header_provider,
@@ -306,7 +306,7 @@ def ingest_codebase(
     state["file_hashes"] = file_hashes
     state["indexed_commit"] = current_commit
     state["indexed_at"] = datetime.now(timezone.utc).isoformat()
-    state["project"] = project_id
+    state["repository"] = repo_id
     state["branch"] = branch
 
     # Save updated state
@@ -319,7 +319,7 @@ def ingest_codebase(
             include_patterns=include_patterns,
             use_cortexignore=use_cortexignore,
         )
-        store_skeleton(collection, tree_output, project_id, branch, tree_stats)
+        store_skeleton(collection, tree_output, repo_id, branch, tree_stats)
         stats["skeleton"] = tree_stats
         logger.info(f"Skeleton indexed: {tree_stats['total_files']} files, {tree_stats['total_dirs']} dirs")
     except Exception as e:
@@ -339,7 +339,7 @@ def ingest_codebase(
 def ingest_files(
     file_paths: list[str],
     collection: chromadb.Collection,
-    project_id: str,
+    repo_id: str,
     anthropic_client: Optional[Anthropic] = None,
     header_provider: str = "none",
 ) -> dict[str, Any]:
@@ -351,7 +351,7 @@ def ingest_files(
     Args:
         file_paths: List of file paths to ingest
         collection: ChromaDB collection
-        project_id: Project identifier
+        repo_id: Repository identifier
         anthropic_client: Anthropic client
         header_provider: Header provider setting
 
@@ -382,7 +382,7 @@ def ingest_files(
             doc_ids = ingest_file(
                 file_path=file_path,
                 collection=collection,
-                project_id=project_id,
+                repo_id=repo_id,
                 branch=branch,
                 anthropic_client=anthropic_client,
                 header_provider=header_provider,

@@ -180,7 +180,7 @@ def _analyze_tree(tree_output: str) -> dict:
 def store_skeleton(
     collection: chromadb.Collection,
     tree_output: str,
-    project_id: str,
+    repo_id: str,
     branch: str,
     stats: dict,
 ) -> str:
@@ -190,14 +190,14 @@ def store_skeleton(
     Args:
         collection: ChromaDB collection
         tree_output: The tree structure text
-        project_id: Project identifier
+        repo_id: Repository identifier
         branch: Git branch name
         stats: Tree statistics
 
     Returns:
         Document ID
     """
-    doc_id = f"{project_id}:skeleton:{branch}"
+    doc_id = f"{repo_id}:skeleton:{branch}"
 
     collection.upsert(
         ids=[doc_id],
@@ -205,7 +205,7 @@ def store_skeleton(
         metadatas=[
             {
                 "type": "skeleton",
-                "project": project_id,
+                "repository": repo_id,
                 "branch": branch,
                 "generated_at": datetime.now(timezone.utc).isoformat(),
                 "total_files": stats.get("total_files", 0),

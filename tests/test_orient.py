@@ -55,7 +55,7 @@ class TestOrientSession:
 
             # State shows indexed
             mock_load_state.return_value = {
-                "project": project_name,
+                "repository": project_name,
                 "indexed_commit": "abc123",
                 "indexed_at": indexed_at,
                 "branch": "main",
@@ -74,7 +74,7 @@ class TestOrientSession:
         assert result["indexed"] is True
         assert result["last_indexed"] == indexed_at
         assert result["file_count"] == 2
-        assert result["project"] == project_name
+        assert result["repository"] == project_name
 
     def test_orient_detects_branch_switch(self, temp_git_repo: Path):
         """Test that branch switch triggers needs_reindex."""
@@ -89,7 +89,7 @@ class TestOrientSession:
 
             # Indexed on 'main', but now on 'feature'
             mock_load_state.return_value = {
-                "project": project_name,
+                "repository": project_name,
                 "indexed_commit": "abc123",
                 "indexed_at": indexed_at,
                 "branch": "main",
@@ -120,7 +120,7 @@ class TestOrientSession:
              patch("src.tools.orient.get_commits_since") as mock_commits:
 
             mock_load_state.return_value = {
-                "project": project_name,
+                "repository": project_name,
                 "indexed_commit": "abc123",
                 "indexed_at": indexed_at,
                 "branch": "main",
@@ -152,7 +152,7 @@ class TestOrientSession:
              patch("src.tools.orient.count_tracked_files") as mock_count:
 
             mock_load_state.return_value = {
-                "project": project_name,
+                "repository": project_name,
                 "indexed_commit": "abc123",
                 "indexed_at": indexed_at,
                 "branch": "main",
@@ -182,7 +182,7 @@ class TestOrientSession:
              patch("src.tools.orient.load_state") as mock_load_state:
 
             mock_load_state.return_value = {
-                "project": project_name,
+                "repository": project_name,
                 "indexed_commit": "abc123",
                 "indexed_at": datetime.now(timezone.utc).isoformat(),
                 "branch": "main",
@@ -222,7 +222,7 @@ class TestOrientSession:
              patch("src.tools.orient.load_state") as mock_load_state:
 
             mock_load_state.return_value = {
-                "project": project_name,
+                "repository": project_name,
                 "indexed_commit": "abc123",
                 "indexed_at": datetime.now(timezone.utc).isoformat(),
                 "branch": "main",
@@ -260,7 +260,7 @@ class TestOrientSession:
              patch("src.tools.orient.load_state") as mock_load_state:
 
             mock_load_state.return_value = {
-                "project": project_name,
+                "repository": project_name,
                 "indexed_commit": "abc123",
                 "indexed_at": datetime.now(timezone.utc).isoformat(),
                 "branch": "main",

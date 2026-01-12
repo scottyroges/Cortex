@@ -85,7 +85,7 @@ def _filter_by_initiative(results: list, initiative_id: str, include_completed: 
 
 
 def build_branch_aware_filter(
-    project: Optional[str] = None,
+    repository: Optional[str] = None,
     branches: Optional[list[str]] = None,
 ) -> Optional[dict]:
     """
@@ -95,7 +95,7 @@ def build_branch_aware_filter(
     Notes, commits, tech_stack, initiatives are never filtered by branch.
 
     Args:
-        project: Optional project filter
+        repository: Optional repository filter
         branches: List of branches to include for code/skeleton
 
     Returns:
@@ -103,7 +103,7 @@ def build_branch_aware_filter(
     """
     if not branches or branches == ["unknown"]:
         # No branch filtering if unknown
-        return {"project": project} if project else None
+        return {"repository": repository} if repository else None
 
     # Types filtered by branch: code, skeleton
     # Types NOT filtered: note, commit, tech_stack, initiative
@@ -119,15 +119,14 @@ def build_branch_aware_filter(
         ]
     }
 
-    if project:
-        return {"$and": [{"project": project}, branch_filter]}
+    if repository:
+        return {"$and": [{"repository": repository}, branch_filter]}
 
     return branch_filter
 
 
 def search_cortex(
     query: str,
-    project: Optional[str] = None,
     repository: Optional[str] = None,
     min_score: Optional[float] = None,
     branch: Optional[str] = None,
@@ -139,7 +138,6 @@ def search_cortex(
 
     Args:
         query: Natural language search query
-        project: Optional project filter (deprecated, use repository)
         repository: Repository identifier for filtering
         min_score: Minimum relevance score threshold (0-1, overrides config)
         branch: Optional branch filter. Defaults to auto-detect from cwd.
@@ -150,8 +148,7 @@ def search_cortex(
     Returns:
         JSON with search results including content, file paths, and scores
     """
-    # Handle project/repository naming transition
-    repo = repository or project
+    repo = repository
     if not CONFIG["enabled"]:
         logger.info("Search rejected: Cortex is disabled")
         return json.dumps({"error": "Cortex is disabled", "results": []})
@@ -178,7 +175,7 @@ def search_cortex(
 
         # Build smart where filter (code filters by branch, notes don't)
         where_filter = build_branch_aware_filter(
-            project=repo,
+            repository=repo,
             branches=branches,
         )
         logger.debug(f"Branch filter: effective={effective_branch}, branches={branches}")
@@ -261,8 +258,7 @@ def search_cortex(
             result = {
                 "content": r.get("text", "")[:2000],
                 "file_path": meta.get("file_path", "unknown"),
-                "repository": meta.get("repository", meta.get("project", "unknown")),
-                "project": meta.get("project", "unknown"),  # Keep for backwards compat
+                "repository": meta.get("repository", "unknown"),
                 "branch": meta.get("branch", "unknown"),
                 "language": meta.get("language", "unknown"),
                 "score": float(round(final_score, 4)),
@@ -278,33 +274,33 @@ def search_cortex(
                     result["initiative_boost"] = r["initiative_boost"]
             results.append(result)
 
-        # Fetch skeleton if we have results with a project
+        # Fetch skeleton if we have results with a repository
         skeleton_data = None
-        detected_project = repo
-        if not detected_project and results:
-            detected_project = results[0].get("repository", results[0].get("project"))
+        detected_repo = repo
+        if not detected_repo and results:
+            detected_repo = results[0].get("repository")
 
-        if detected_project and detected_project != "unknown":
+        if detected_repo and detected_repo != "unknown":
             try:
                 # Try to get skeleton for current branch first
                 skeleton_results = collection.get(
                     where={"$and": [
                         {"type": "skeleton"},
-                        {"project": detected_project},
+                        {"repository": detected_repo},
                         {"branch": {"$in": branches}},
                     ]},
                     include=["documents", "metadatas"],
                 )
-                # Fallback to any skeleton for this project if branch-specific not found
+                # Fallback to any skeleton for this repository if branch-specific not found
                 if not skeleton_results["documents"]:
                     skeleton_results = collection.get(
-                        where={"$and": [{"type": "skeleton"}, {"project": detected_project}]},
+                        where={"$and": [{"type": "skeleton"}, {"repository": detected_repo}]},
                         include=["documents", "metadatas"],
                     )
                 if skeleton_results["documents"]:
                     skel_meta = skeleton_results["metadatas"][0]
                     skeleton_data = {
-                        "project": detected_project,
+                        "repository": detected_repo,
                         "branch": skel_meta.get("branch", "unknown"),
                         "total_files": skel_meta.get("total_files", 0),
                         "total_dirs": skel_meta.get("total_dirs", 0),
@@ -316,16 +312,16 @@ def search_cortex(
 
         # Fetch repository context (tech_stack + initiative)
         context_data = None
-        if detected_project and detected_project != "unknown":
+        if detected_repo and detected_repo != "unknown":
             try:
-                tech_stack_id = f"{detected_project}:tech_stack"
-                initiative_id = f"{detected_project}:initiative"
+                tech_stack_id = f"{detected_repo}:tech_stack"
+                initiative_id = f"{detected_repo}:initiative"
                 context_results = collection.get(
                     ids=[tech_stack_id, initiative_id],
                     include=["documents", "metadatas"],
                 )
                 if context_results["documents"]:
-                    context_data = {"repository": detected_project}
+                    context_data = {"repository": detected_repo}
                     for i, doc_id in enumerate(context_results.get("ids", [])):
                         if i < len(context_results.get("documents", [])):
                             doc = context_results["documents"][i]
@@ -356,10 +352,10 @@ def search_cortex(
         }
 
         if skeleton_data:
-            response["project_skeleton"] = skeleton_data
+            response["repository_skeleton"] = skeleton_data
 
         if context_data:
-            response["project_context"] = context_data
+            response["repository_context"] = context_data
 
         if CONFIG["verbose"]:
             response["config"] = CONFIG
