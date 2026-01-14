@@ -134,7 +134,7 @@ MCP_TOOL_SCHEMAS = [
     },
     {
         "name": "set_repo_context",
-        "description": "Set static tech stack context for a repository.",
+        "description": "Set static tech stack context for a repository. This context is returned by orient_session and helps Claude understand the codebase. IMPORTANT: Only include stable, structural information that won't become stale. DO include: languages, frameworks, architecture patterns, module responsibilities, design philosophy. DO NOT include: version numbers, phase/status indicators, counts (e.g., '7 modules'), dates, or anything that changes frequently.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -144,7 +144,7 @@ MCP_TOOL_SCHEMAS = [
                 },
                 "tech_stack": {
                     "type": "string",
-                    "description": "Technologies, patterns, architecture description",
+                    "description": "Technologies, patterns, architecture description. Focus on stable structural info, not specifics that get stale.",
                 },
             },
             "required": ["repository", "tech_stack"],

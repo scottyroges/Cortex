@@ -26,9 +26,15 @@ def set_repo_context(
     This is typically set once per repository and rarely updated.
     Describes technologies, patterns, and architectural decisions.
 
+    IMPORTANT: Only include stable, structural information that won't become stale.
+    DO include: languages, frameworks, architecture patterns, module responsibilities,
+    design philosophy.
+    DO NOT include: version numbers, phase/status indicators, counts (e.g., '7 modules'),
+    dates, or anything that changes frequently.
+
     Args:
         repository: Repository identifier (e.g., "Cortex", "my-app")
-        tech_stack: Technologies, patterns, architecture (e.g., "Python, ChromaDB, FastMCP")
+        tech_stack: Technologies, patterns, architecture. Focus on stable structural info.
 
     Returns:
         JSON with saved tech_stack context ID

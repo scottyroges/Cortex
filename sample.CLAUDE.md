@@ -11,6 +11,28 @@
 | `cortex>> status` | Check if Cortex daemon is running |
 | `cortex>> commit` | Use `commit_to_cortex` |
 
+## Repository Context
+
+Use `set_repo_context` to give Claude persistent understanding of a codebase's architecture:
+
+```
+set_repo_context(repository="my-app", tech_stack="...")
+```
+
+**What to include** (stable, structural info):
+- Languages and frameworks (Python, FastAPI, PostgreSQL)
+- Architecture patterns (event-driven, microservices, monolith)
+- Module responsibilities (src/api/ handles REST endpoints)
+- Design philosophy and conventions
+
+**What NOT to include** (gets stale):
+- Version numbers (Python 3.11, React 18)
+- Phase/status indicators (Phase 2, MVP complete)
+- Counts (7 modules, 50 endpoints)
+- Dates or timelines
+
+The context is returned by `orient_session` at the start of each session.
+
 ## Initiative Management
 
 | Command | What it does |
