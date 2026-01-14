@@ -163,6 +163,38 @@ Cortex fills this gap by storing:
 
 ---
 
+## Installation & Updates
+
+*Make Cortex easy to install, update, and maintain.*
+
+### High Priority
+
+| Feature | Description | Value |
+|---------|-------------|-------|
+| **One-Line Installer** | `curl -fsSL https://get.cortex.dev \| bash` - Downloads, configures Claude Code MCP settings, pulls Docker image. | Zero-friction onboarding |
+| **Auto-Update Check** | `orient_session` returns `update_available: true` when newer version exists. Prompt user to update. | Users stay current without manual checking |
+| **`cortex update`** | Single command pulls latest image, migrates data if needed, restarts daemon. | Painless updates |
+| **Health Check** | `cortex doctor` - Verify Docker running, ports available, ChromaDB accessible, MCP connection working. | Debug installation issues |
+
+### Medium Priority
+
+| Feature | Description | Value |
+|---------|-------------|-------|
+| **Migration System** | Detect schema version, auto-run migrations on startup. Backup before migrate. | Breaking changes don't break users |
+| **Homebrew Formula** | `brew install cortex-memory` - Native package for macOS users. | Platform-native experience |
+| **Version Pinning** | Allow users to pin to specific version in config. Skip auto-update prompts. | Stability for production use |
+| **Uninstall Command** | `cortex uninstall` - Remove Docker image, optionally delete data, clean MCP config. | Clean removal |
+
+### Lower Priority
+
+| Feature | Description | Value |
+|---------|-------------|-------|
+| **Linux Packages** | apt/dnf packages for Linux distributions | Broader platform support |
+| **Windows Support** | WSL2-based installation path | Windows developer audience |
+| **Offline Install** | Bundle Docker image for air-gapped environments | Enterprise/secure environments |
+
+---
+
 ## To Explore: Memory Browser UI
 
 *Should Cortex have a visual interface for browsing stored memory?*
