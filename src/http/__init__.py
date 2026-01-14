@@ -1,7 +1,7 @@
 """
 Cortex HTTP Server
 
-FastAPI-based HTTP endpoints for debugging, Phase 2 features, and MCP protocol.
+FastAPI-based HTTP endpoints for browsing, API access, and MCP protocol.
 """
 
 from datetime import datetime
@@ -9,7 +9,7 @@ from datetime import datetime
 from fastapi import FastAPI
 
 from src.http.api import router as api_router
-from src.http.debug import router as debug_router
+from src.http.browse import router as browse_router
 from src.http.mcp_protocol import router as mcp_router
 
 # Track server startup time
@@ -23,13 +23,13 @@ def get_startup_time() -> str:
 
 # Create FastAPI app
 app = FastAPI(
-    title="Cortex Debug Server",
-    description="Debug and Phase 2 HTTP endpoints for Cortex",
+    title="Cortex Server",
+    description="HTTP endpoints for Cortex memory browser and API",
     version="1.0.0",
 )
 
 # Include routers
-app.include_router(debug_router, prefix="/debug", tags=["debug"])
+app.include_router(browse_router, prefix="/browse", tags=["browse"])
 app.include_router(api_router, tags=["api"])
 app.include_router(mcp_router, prefix="/mcp", tags=["mcp"])
 

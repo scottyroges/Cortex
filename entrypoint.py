@@ -32,9 +32,17 @@ def main():
         from src.server import mcp
         mcp.run()
 
+    elif mode == "browse":
+        # Run TUI memory browser
+        from src.browser.terminal import run_browser
+        # Get daemon URL from environment or use default
+        import os
+        base_url = os.environ.get("CORTEX_HTTP_URL", "http://localhost:8080")
+        run_browser(base_url=base_url)
+
     else:
         print(f"Unknown mode: {mode}", file=sys.stderr)
-        print("Usage: entrypoint.py [daemon|bridge|stdio]", file=sys.stderr)
+        print("Usage: entrypoint.py [daemon|bridge|stdio|browse]", file=sys.stderr)
         sys.exit(1)
 
 

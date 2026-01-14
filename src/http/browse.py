@@ -1,7 +1,7 @@
 """
-Debug Endpoints
+Browse Endpoints
 
-HTTP endpoints for database inspection and debugging.
+HTTP endpoints for memory browsing and exploration.
 """
 
 import time
@@ -13,7 +13,7 @@ from logging_config import get_logger
 from src.search import HybridSearcher, RerankerService
 from src.storage import get_chroma_client, get_or_create_collection
 
-logger = get_logger("http.debug")
+logger = get_logger("http.browse")
 
 router = APIRouter()
 
@@ -50,13 +50,13 @@ def get_reranker():
 
 
 @router.get("/stats")
-def debug_stats() -> dict[str, Any]:
+def browse_stats() -> dict[str, Any]:
     """
     Get collection statistics.
 
     Returns counts by repository, type, and language.
     """
-    logger.info("Debug stats requested")
+    logger.info("Browse stats requested")
     collection = get_collection()
 
     # Get all documents with metadata
@@ -88,14 +88,14 @@ def debug_stats() -> dict[str, Any]:
 
 
 @router.get("/sample")
-def debug_sample(limit: int = Query(default=10, le=100)) -> list[dict[str, Any]]:
+def browse_sample(limit: int = Query(default=10, le=100)) -> list[dict[str, Any]]:
     """
     Get sample documents from the collection.
 
     Args:
         limit: Maximum number of documents to return (max 100)
     """
-    logger.info(f"Debug sample requested: limit={limit}")
+    logger.info(f"Browse sample requested: limit={limit}")
     collection = get_collection()
 
     results = collection.get(
@@ -119,7 +119,7 @@ def debug_sample(limit: int = Query(default=10, le=100)) -> list[dict[str, Any]]
 
 
 @router.get("/list")
-def debug_list(
+def browse_list(
     repository: Optional[str] = None,
     doc_type: Optional[str] = Query(default=None, alias="type"),
     limit: int = Query(default=50, le=500),
@@ -129,10 +129,10 @@ def debug_list(
 
     Args:
         repository: Filter by repository name
-        type: Filter by document type (code, note, commit)
+        type: Filter by document type (code, note, commit, insight, initiative)
         limit: Maximum results
     """
-    logger.info(f"Debug list requested: repository={repository}, type={doc_type}")
+    logger.info(f"Browse list requested: repository={repository}, type={doc_type}")
     collection = get_collection()
 
     # Build where filter
@@ -162,14 +162,14 @@ def debug_list(
 
 
 @router.get("/get/{doc_id}")
-def debug_get(doc_id: str) -> dict[str, Any]:
+def browse_get(doc_id: str) -> dict[str, Any]:
     """
     Get a specific document by ID.
 
     Args:
         doc_id: Document ID
     """
-    logger.info(f"Debug get requested: doc_id={doc_id}")
+    logger.info(f"Browse get requested: doc_id={doc_id}")
     collection = get_collection()
 
     results = collection.get(
@@ -189,20 +189,20 @@ def debug_get(doc_id: str) -> dict[str, Any]:
 
 
 @router.get("/search")
-def debug_search(
+def browse_search(
     q: str = Query(..., min_length=1),
     limit: int = Query(default=20, le=100),
     rerank: bool = Query(default=False),
 ) -> dict[str, Any]:
     """
-    Raw search for debugging (shows scores and timing).
+    Search with detailed scores and timing.
 
     Args:
         q: Search query
         limit: Maximum results
         rerank: Whether to apply reranking
     """
-    logger.info(f"Debug search: query='{q}', limit={limit}, rerank={rerank}")
+    logger.info(f"Browse search: query='{q}', limit={limit}, rerank={rerank}")
     start_time = time.time()
 
     searcher = get_searcher()
@@ -243,5 +243,5 @@ def debug_search(
     response["timing"]["total_ms"] = round((time.time() - start_time) * 1000, 2)
     response["result_count"] = len(response["results"])
 
-    logger.debug(f"Debug search complete: {len(response['results'])} results in {response['timing']['total_ms']}ms")
+    logger.debug(f"Browse search complete: {len(response['results'])} results in {response['timing']['total_ms']}ms")
     return response
