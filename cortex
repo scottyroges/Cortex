@@ -636,23 +636,6 @@ except Exception as e:
 "
 }
 
-cli_browse() {
-    if ! is_daemon_running; then
-        echo "Error: Daemon is not running. Start with: cortex daemon start" >&2
-        exit 1
-    fi
-
-    build_docker_volumes
-    build_docker_env
-
-    # Run TUI browser interactively
-    exec docker run -it --rm \
-        --network host \
-        -e "CORTEX_HTTP_URL=http://localhost:${HTTP_PORT}" \
-        "${DOCKER_ENVS[@]}" \
-        "$IMAGE_NAME" browse
-}
-
 cli_save() {
     # Parse options
     local title=""
@@ -754,7 +737,6 @@ USAGE:
 
 COMMANDS:
     (default)           Start MCP bridge (auto-starts daemon if needed)
-    browse              Open interactive TUI memory browser
     search <query>      Search memory directly (bypasses LLM)
     save [opts] <text>  Save a note directly (bypasses LLM)
                         Options: -t <title>, -p <project>, --tags <a,b>
@@ -801,7 +783,6 @@ QUICK START:
 EXAMPLES:
     cortex init                 # First-time setup
     cortex                      # Start MCP server (normal usage)
-    cortex browse               # Open TUI memory browser
     cortex search auth flow     # Quick search from terminal
     cortex save "Use JWT"       # Save a quick note
     cortex save -t "Decision" "We chose Redis for caching"
@@ -891,9 +872,6 @@ case "${1:-}" in
     save)
         shift
         cli_save "$@"
-        ;;
-    browse)
-        cli_browse
         ;;
     *)
         # Default: run stdio bridge (auto-starts daemon if needed)

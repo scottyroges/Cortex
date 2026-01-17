@@ -72,15 +72,16 @@ Cortex fills this gap by storing:
 
 *Reduce barriers to adoption and usage. Make Cortex effortless to install, use, and explore.*
 
-### Memory Browser (High Priority)
+### Memory Browser ✅
 
-*"What do I actually have stored?" - Make memory visible and explorable.*
+*Complete - Web UI for exploring memory.*
 
-| Feature | Description | Value |
-|---------|-------------|-------|
-| **TUI Browser** | `cortex browse` - Terminal-based memory explorer. List notes, insights, initiatives. Filter by repo/type. | Immediate visibility, no web server |
-| **Stats Dashboard** | Show counts by type, storage size, staleness warnings. | Understand what's in memory |
-| **Search Preview** | Interactive search with result preview in terminal. | Faster exploration than MCP round-trips |
+| Feature | Status | Description |
+|---------|--------|-------------|
+| **Web UI** | ✅ | Browser-based memory explorer at `http://localhost:8080` |
+| **Stats Dashboard** | ✅ | Counts by type, storage stats |
+| **Search Preview** | ✅ | Interactive search with result preview |
+| **Edit/Delete** | ✅ | Modify or remove stored memories |
 
 ### Installation & Updates (High Priority)
 
