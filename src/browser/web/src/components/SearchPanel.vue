@@ -13,6 +13,7 @@ const query = ref('')
 const response = ref<SearchResponse | null>(null)
 const loading = ref(false)
 const error = ref<string | null>(null)
+const collapsed = ref(true)
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -32,12 +33,20 @@ async function search() {
   error.value = null
   try {
     response.value = await client.search(q, { limit: 20, rerank: true })
+    // Auto-expand when results arrive
+    if (response.value && response.value.results.length > 0) {
+      collapsed.value = false
+    }
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Search failed'
     response.value = null
   } finally {
     loading.value = false
   }
+}
+
+function toggleCollapsed() {
+  collapsed.value = !collapsed.value
 }
 
 function selectResult(result: SearchResult) {
@@ -54,7 +63,30 @@ function formatScore(scores: SearchResult['scores']): string {
   <div class="card">
     <div class="p-3 border-b border-gray-700">
       <div class="flex items-center gap-2">
+        <!-- Toggle button -->
+        <button
+          v-if="response && response.results.length > 0"
+          class="p-1 hover:bg-gray-700 rounded transition-colors"
+          :title="collapsed ? 'Show results' : 'Hide results'"
+          @click="toggleCollapsed"
+        >
+          <svg
+            class="w-5 h-5 text-gray-400 transition-transform duration-200"
+            :class="{ 'rotate-180': !collapsed }"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M5 15l7-7 7 7"
+            />
+          </svg>
+        </button>
         <svg
+          v-else
           class="w-5 h-5 text-gray-500"
           fill="none"
           stroke="currentColor"
@@ -81,42 +113,48 @@ function formatScore(scores: SearchResult['scores']): string {
       </div>
     </div>
 
-    <div v-if="loading" class="p-3 text-gray-400 text-sm">Searching...</div>
-
-    <div v-else-if="error" class="p-3 text-red-400 text-sm">{{ error }}</div>
-
+    <!-- Collapsible results area -->
     <div
-      v-else-if="response && response.results.length > 0"
-      class="max-h-48 overflow-auto"
+      class="results-container transition-all duration-200 overflow-hidden"
+      :class="collapsed ? 'max-h-0' : 'max-h-48'"
     >
-      <ul class="divide-y divide-gray-700">
-        <li
-          v-for="result in response.results"
-          :key="result.id"
-          class="px-3 py-2 hover:bg-gray-750 cursor-pointer transition-colors"
-          @click="selectResult(result)"
-        >
-          <div class="flex items-center gap-2">
-            <TypeBadge :type="result.metadata.type as string" />
-            <span class="text-sm text-gray-200 truncate flex-1">
-              {{ result.metadata.title || result.id }}
-            </span>
-            <span class="text-xs text-gray-500 font-mono">
-              {{ formatScore(result.scores) }}
-            </span>
-          </div>
-          <p class="text-xs text-gray-500 mt-1 line-clamp-2">
-            {{ result.content_preview }}
-          </p>
-        </li>
-      </ul>
-    </div>
+      <div v-if="loading" class="p-3 text-gray-400 text-sm">Searching...</div>
 
-    <div
-      v-else-if="query.trim() && response && response.results.length === 0"
-      class="p-3 text-gray-500 text-sm"
-    >
-      No results found
+      <div v-else-if="error" class="p-3 text-red-400 text-sm">{{ error }}</div>
+
+      <div
+        v-else-if="response && response.results.length > 0"
+        class="overflow-auto max-h-48"
+      >
+        <ul class="divide-y divide-gray-700">
+          <li
+            v-for="result in response.results"
+            :key="result.id"
+            class="px-3 py-2 hover:bg-gray-750 cursor-pointer transition-colors"
+            @click="selectResult(result)"
+          >
+            <div class="flex items-center gap-2">
+              <TypeBadge :type="result.metadata.type as string" />
+              <span class="text-sm text-gray-200 truncate flex-1">
+                {{ result.metadata.title || result.id }}
+              </span>
+              <span class="text-xs text-gray-500 font-mono">
+                {{ formatScore(result.scores) }}
+              </span>
+            </div>
+            <p class="text-xs text-gray-500 mt-1 line-clamp-2">
+              {{ result.content_preview }}
+            </p>
+          </li>
+        </ul>
+      </div>
+
+      <div
+        v-else-if="query.trim() && response && response.results.length === 0"
+        class="p-3 text-gray-500 text-sm"
+      >
+        No results found
+      </div>
     </div>
   </div>
 </template>
