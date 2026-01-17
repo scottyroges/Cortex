@@ -38,6 +38,26 @@ def api_client(temp_chroma_client):
     api_module._reranker = None
 
 
+@pytest.fixture
+def browse_client(temp_chroma_client):
+    """Create a test client for the browse API with patched ChromaDB."""
+    import src.http.browse as browse_module
+    browse_module._client = None
+    browse_module._collection = None
+    browse_module._searcher = None
+    browse_module._reranker = None
+
+    with patch("src.http.browse.get_chroma_client", return_value=temp_chroma_client):
+        from src.http import app
+        client = TestClient(app)
+        yield client
+
+    browse_module._client = None
+    browse_module._collection = None
+    browse_module._searcher = None
+    browse_module._reranker = None
+
+
 class TestSearchEndpoint:
     """Tests for GET /search endpoint."""
 
@@ -321,3 +341,323 @@ class TestIngestEndpoint:
         data = search_response.json()
         found = any("quantum" in r["content"].lower() for r in data["results"])
         assert found, "Ingested content should be searchable"
+
+
+class TestBrowseUpdateEndpoint:
+    """Tests for PUT /browse/update endpoint."""
+
+    def test_update_note_title(self, browse_client, temp_chroma_client):
+        """Test updating a note's title."""
+        from src.storage import get_or_create_collection
+
+        collection = get_or_create_collection(temp_chroma_client, "cortex_memory")
+        collection.add(
+            documents=["Original note content"],
+            ids=["note_123"],
+            metadatas=[{
+                "type": "note",
+                "title": "Original Title",
+                "repository": "test",
+                "branch": "main",
+                "tags": "[]",
+            }],
+        )
+
+        response = browse_client.put(
+            "/browse/update",
+            params={"id": "note_123"},
+            json={"title": "Updated Title"}
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert "title" in data["updated_fields"]
+
+        # Verify the update
+        result = collection.get(ids=["note_123"], include=["metadatas"])
+        assert result["metadatas"][0]["title"] == "Updated Title"
+
+    def test_update_note_content(self, browse_client, temp_chroma_client):
+        """Test updating a note's content."""
+        from src.storage import get_or_create_collection
+
+        collection = get_or_create_collection(temp_chroma_client, "cortex_memory")
+        collection.add(
+            documents=["Original content"],
+            ids=["note_456"],
+            metadatas=[{
+                "type": "note",
+                "title": "Test Note",
+                "repository": "test",
+                "branch": "main",
+                "tags": "[]",
+            }],
+        )
+
+        response = browse_client.put(
+            "/browse/update",
+            params={"id": "note_456"},
+            json={"content": "Updated content with more details"}
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "content" in data["updated_fields"]
+
+        # Verify the update
+        result = collection.get(ids=["note_456"], include=["documents"])
+        assert result["documents"][0] == "Updated content with more details"
+
+    def test_update_note_tags(self, browse_client, temp_chroma_client):
+        """Test updating a note's tags."""
+        from src.storage import get_or_create_collection
+
+        collection = get_or_create_collection(temp_chroma_client, "cortex_memory")
+        collection.add(
+            documents=["Note with tags"],
+            ids=["note_789"],
+            metadatas=[{
+                "type": "note",
+                "title": "Tagged Note",
+                "repository": "test",
+                "branch": "main",
+                "tags": '["old-tag"]',
+            }],
+        )
+
+        response = browse_client.put(
+            "/browse/update",
+            params={"id": "note_789"},
+            json={"tags": ["new-tag", "another-tag"]}
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "tags" in data["updated_fields"]
+
+        # Verify the update
+        result = collection.get(ids=["note_789"], include=["metadatas"])
+        assert result["metadatas"][0]["tags"] == '["new-tag", "another-tag"]'
+
+    def test_update_insight_with_files(self, browse_client, temp_chroma_client):
+        """Test updating an insight's files list."""
+        from src.storage import get_or_create_collection
+
+        collection = get_or_create_collection(temp_chroma_client, "cortex_memory")
+        collection.add(
+            documents=["Insight about code pattern"],
+            ids=["insight_001"],
+            metadatas=[{
+                "type": "insight",
+                "title": "Code Pattern",
+                "repository": "test",
+                "branch": "main",
+                "tags": "[]",
+                "files": '["old/path.py"]',
+            }],
+        )
+
+        response = browse_client.put(
+            "/browse/update",
+            params={"id": "insight_001"},
+            json={"files": ["new/path.py", "another/file.py"]}
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "files" in data["updated_fields"]
+
+    def test_update_nonexistent_document(self, browse_client):
+        """Test updating a document that doesn't exist."""
+        response = browse_client.put(
+            "/browse/update",
+            params={"id": "nonexistent_id"},
+            json={"title": "New Title"}
+        )
+
+        assert response.status_code == 404
+
+    def test_update_non_editable_type(self, browse_client, temp_chroma_client):
+        """Test that code documents cannot be edited."""
+        from src.storage import get_or_create_collection
+
+        collection = get_or_create_collection(temp_chroma_client, "cortex_memory")
+        collection.add(
+            documents=["def hello(): pass"],
+            ids=["code_001"],
+            metadatas=[{
+                "type": "code",
+                "file_path": "/app/hello.py",
+                "repository": "test",
+                "branch": "main",
+                "language": "python",
+            }],
+        )
+
+        response = browse_client.put(
+            "/browse/update",
+            params={"id": "code_001"},
+            json={"content": "def goodbye(): pass"}
+        )
+
+        assert response.status_code == 400
+        assert "not editable" in response.json()["detail"]
+
+    def test_update_commit_content(self, browse_client, temp_chroma_client):
+        """Test updating a commit's content."""
+        from src.storage import get_or_create_collection
+
+        collection = get_or_create_collection(temp_chroma_client, "cortex_memory")
+        collection.add(
+            documents=["Original commit summary"],
+            ids=["commit_001"],
+            metadatas=[{
+                "type": "commit",
+                "repository": "test",
+                "branch": "main",
+                "files": '["file1.py"]',
+            }],
+        )
+
+        response = browse_client.put(
+            "/browse/update",
+            params={"id": "commit_001"},
+            json={"content": "Updated commit summary with more details"}
+        )
+
+        assert response.status_code == 200
+        assert "content" in response.json()["updated_fields"]
+
+    def test_update_commit_title_not_allowed(self, browse_client, temp_chroma_client):
+        """Test that commits cannot have their title updated (not an editable field)."""
+        from src.storage import get_or_create_collection
+
+        collection = get_or_create_collection(temp_chroma_client, "cortex_memory")
+        collection.add(
+            documents=["Commit summary"],
+            ids=["commit_002"],
+            metadatas=[{
+                "type": "commit",
+                "repository": "test",
+                "branch": "main",
+                "files": "[]",
+            }],
+        )
+
+        # Title is not editable for commits - should return 400 with no valid fields
+        response = browse_client.put(
+            "/browse/update",
+            params={"id": "commit_002"},
+            json={"title": "New Title"}
+        )
+
+        assert response.status_code == 400
+        assert "No valid fields" in response.json()["detail"]
+
+
+class TestBrowseDeleteEndpoint:
+    """Tests for DELETE /browse/delete endpoint."""
+
+    def test_delete_note(self, browse_client, temp_chroma_client):
+        """Test deleting a note."""
+        from src.storage import get_or_create_collection
+
+        collection = get_or_create_collection(temp_chroma_client, "cortex_memory")
+        collection.add(
+            documents=["Note to delete"],
+            ids=["note_to_delete"],
+            metadatas=[{
+                "type": "note",
+                "title": "Delete Me",
+                "repository": "test",
+                "branch": "main",
+                "tags": "[]",
+            }],
+        )
+
+        response = browse_client.delete("/browse/delete", params={"id": "note_to_delete"})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["id"] == "note_to_delete"
+
+        # Verify deletion
+        result = collection.get(ids=["note_to_delete"])
+        assert len(result["ids"]) == 0
+
+    def test_delete_insight(self, browse_client, temp_chroma_client):
+        """Test deleting an insight."""
+        from src.storage import get_or_create_collection
+
+        collection = get_or_create_collection(temp_chroma_client, "cortex_memory")
+        collection.add(
+            documents=["Insight to delete"],
+            ids=["insight_to_delete"],
+            metadatas=[{
+                "type": "insight",
+                "title": "Delete Me",
+                "repository": "test",
+                "branch": "main",
+                "files": "[]",
+            }],
+        )
+
+        response = browse_client.delete("/browse/delete", params={"id": "insight_to_delete"})
+
+        assert response.status_code == 200
+        assert response.json()["success"] is True
+
+    def test_delete_code_chunk(self, browse_client, temp_chroma_client):
+        """Test deleting a code chunk (all types are deletable)."""
+        from src.storage import get_or_create_collection
+
+        collection = get_or_create_collection(temp_chroma_client, "cortex_memory")
+        collection.add(
+            documents=["def hello(): pass"],
+            ids=["code_to_delete"],
+            metadatas=[{
+                "type": "code",
+                "file_path": "/app/hello.py",
+                "repository": "test",
+                "branch": "main",
+                "language": "python",
+            }],
+        )
+
+        response = browse_client.delete("/browse/delete", params={"id": "code_to_delete"})
+
+        assert response.status_code == 200
+        assert response.json()["success"] is True
+
+    def test_delete_nonexistent_document(self, browse_client):
+        """Test deleting a document that doesn't exist."""
+        response = browse_client.delete("/browse/delete", params={"id": "nonexistent_id"})
+
+        assert response.status_code == 404
+
+    def test_delete_commit(self, browse_client, temp_chroma_client):
+        """Test deleting a commit."""
+        from src.storage import get_or_create_collection
+
+        collection = get_or_create_collection(temp_chroma_client, "cortex_memory")
+        collection.add(
+            documents=["Session summary to delete"],
+            ids=["commit_to_delete"],
+            metadatas=[{
+                "type": "commit",
+                "repository": "test",
+                "branch": "main",
+                "files": '["file.py"]',
+            }],
+        )
+
+        response = browse_client.delete("/browse/delete", params={"id": "commit_to_delete"})
+
+        assert response.status_code == 200
+        assert response.json()["success"] is True
+
+        # Verify deletion
+        result = collection.get(ids=["commit_to_delete"])
+        assert len(result["ids"]) == 0

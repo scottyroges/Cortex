@@ -108,6 +108,41 @@ export class CortexClient {
     }
   }
 
+  private async mutate<T>(
+    path: string,
+    method: 'PUT' | 'DELETE',
+    params?: Record<string, string>,
+    body?: Record<string, unknown>
+  ): Promise<T> {
+    const url = new URL(path, this.baseUrl || window.location.origin)
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== '') {
+          url.searchParams.set(key, value)
+        }
+      })
+    }
+
+    try {
+      const response = await fetch(url.toString(), {
+        method,
+        headers: body ? { 'Content-Type': 'application/json' } : undefined,
+        body: body ? JSON.stringify(body) : undefined,
+      })
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new APIError(response.status, errorText || response.statusText)
+      }
+      return await response.json()
+    } catch (error) {
+      if (error instanceof APIError) throw error
+      if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+        throw new DaemonNotRunningError()
+      }
+      throw new CortexClientError(String(error))
+    }
+  }
+
   async healthCheck(): Promise<boolean> {
     try {
       await this.request('/health')
@@ -187,6 +222,22 @@ export class CortexClient {
       timing_ms: response.timing?.total_ms || 0,
       result_count: response.result_count,
     }
+  }
+
+  async updateDocument(
+    docId: string,
+    data: {
+      title?: string
+      content?: string
+      tags?: string[]
+      files?: string[]
+    }
+  ): Promise<{ success: boolean; id: string; updated_fields: string[] }> {
+    return this.mutate('/browse/update', 'PUT', { id: docId }, data)
+  }
+
+  async deleteDocument(docId: string): Promise<{ success: boolean; id: string }> {
+    return this.mutate('/browse/delete', 'DELETE', { id: docId })
   }
 }
 

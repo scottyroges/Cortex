@@ -11,6 +11,7 @@ const stats = ref<Stats | null>(null)
 const selectedDoc = ref<DocumentSummary | null>(null)
 const connected = ref(true)
 const loading = ref(true)
+const documentListRef = ref<InstanceType<typeof DocumentList> | null>(null)
 
 async function loadStats() {
   try {
@@ -21,6 +22,16 @@ async function loadStats() {
   } finally {
     loading.value = false
   }
+}
+
+function onDocumentDeleted() {
+  selectedDoc.value = null
+  documentListRef.value?.refresh()
+  loadStats() // Refresh stats counts
+}
+
+function onDocumentUpdated() {
+  documentListRef.value?.refresh()
 }
 
 function onSelectDocument(doc: DocumentSummary) {
@@ -97,12 +108,16 @@ onMounted(loadStats)
         <div class="flex-1 flex overflow-hidden">
           <!-- Document List -->
           <div class="w-80 flex-shrink-0 border-r border-gray-700">
-            <DocumentList :stats="stats" @select="onSelectDocument" />
+            <DocumentList ref="documentListRef" :stats="stats" @select="onSelectDocument" />
           </div>
 
           <!-- Document Detail -->
           <div class="flex-1">
-            <DocumentDetail :summary="selectedDoc" />
+            <DocumentDetail
+              :summary="selectedDoc"
+              @document-deleted="onDocumentDeleted"
+              @document-updated="onDocumentUpdated"
+            />
           </div>
         </div>
 
