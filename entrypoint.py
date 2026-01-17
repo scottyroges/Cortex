@@ -19,7 +19,34 @@ def main():
     if mode == "daemon":
         # Run HTTP server as daemon
         import os
+        from logging_config import get_logger
         from src.http import run_server
+
+        logger = get_logger("entrypoint")
+
+        # Check and run migrations before starting server
+        try:
+            from src.migrations import needs_migration, run_migrations, backup_database
+
+            if needs_migration():
+                logger.info("Schema migration required")
+                try:
+                    # Backup before migration
+                    backup_path = backup_database(label="pre_migration")
+                    logger.info(f"Backup created: {backup_path}")
+
+                    # Run migrations
+                    result = run_migrations()
+                    if result["status"] == "complete":
+                        logger.info(f"Migrations complete: v{result['current_version']}")
+                    else:
+                        logger.warning(f"Migration incomplete: {result}")
+                except Exception as e:
+                    logger.error(f"Migration failed: {e}")
+                    # Continue anyway - migrations should be non-destructive
+        except Exception as e:
+            logger.warning(f"Could not check migrations: {e}")
+
         port = int(os.environ.get("CORTEX_HTTP_PORT", "8080"))
         run_server(host="0.0.0.0", port=port)
 

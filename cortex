@@ -572,6 +572,313 @@ run_stdio_legacy() {
         "$IMAGE_NAME" stdio
 }
 
+# --- Update Command ---
+
+do_update() {
+    echo "Cortex Update"
+    echo "============="
+    echo ""
+
+    # Step 1: Check current version
+    echo "Checking versions..."
+    local current_commit
+    local local_commit
+
+    current_commit=$(curl -sf "http://localhost:${DAEMON_PORT}/info" 2>/dev/null | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+print(data.get('git_commit', 'unknown')[:7])
+" 2>/dev/null || echo "unknown")
+
+    local_commit=$(git -C "$CORTEX_SRC_DIR" rev-parse --short HEAD 2>/dev/null || echo "unknown")
+
+    echo "  Running: $current_commit"
+    echo "  Local:   $local_commit"
+    echo ""
+
+    if [ "$current_commit" = "$local_commit" ] && [ "$current_commit" != "unknown" ]; then
+        echo "Already up to date."
+        return 0
+    fi
+
+    # Step 2: Backup database
+    echo "Creating backup..."
+    if is_daemon_running; then
+        local backup_result
+        backup_result=$(curl -sf -X POST "http://localhost:${DAEMON_PORT}/admin/backup" 2>/dev/null)
+        if [ $? -eq 0 ]; then
+            local backup_path
+            backup_path=$(echo "$backup_result" | python3 -c "import json,sys; print(json.load(sys.stdin).get('backup_path',''))" 2>/dev/null)
+            if [ -n "$backup_path" ]; then
+                echo "  Backup created: $backup_path"
+            fi
+        else
+            echo "  Warning: Could not create backup via API, creating manual backup..."
+            if [ -d "$DATA_PATH/db" ]; then
+                local backup_name="backup_update_$(date +%Y%m%d_%H%M%S)"
+                mkdir -p "$DATA_PATH/backups"
+                cp -r "$DATA_PATH/db" "$DATA_PATH/backups/$backup_name"
+                echo "  Manual backup created: $DATA_PATH/backups/$backup_name"
+            fi
+        fi
+    else
+        # Manual backup if daemon not running
+        if [ -d "$DATA_PATH/db" ]; then
+            local backup_name="backup_update_$(date +%Y%m%d_%H%M%S)"
+            mkdir -p "$DATA_PATH/backups"
+            cp -r "$DATA_PATH/db" "$DATA_PATH/backups/$backup_name"
+            echo "  Manual backup created: $DATA_PATH/backups/$backup_name"
+        fi
+    fi
+    echo ""
+
+    # Step 3: Pull latest code (if git repo)
+    if [ -d "$CORTEX_SRC_DIR/.git" ]; then
+        echo "Pulling latest code..."
+        if git -C "$CORTEX_SRC_DIR" pull --ff-only 2>&1; then
+            echo "  Code updated"
+        else
+            echo "  Warning: git pull failed (may have local changes), continuing with local code"
+        fi
+        echo ""
+    fi
+
+    # Step 4: Stop daemon
+    echo "Stopping daemon..."
+    stop_daemon
+    echo ""
+
+    # Step 5: Rebuild image
+    echo "Rebuilding image..."
+    build_image
+    echo ""
+
+    # Step 6: Start daemon (migrations run automatically)
+    echo "Starting daemon..."
+    start_daemon
+    echo ""
+
+    # Step 7: Verify
+    if is_daemon_running; then
+        local new_commit
+        new_commit=$(curl -sf "http://localhost:${DAEMON_PORT}/info" 2>/dev/null | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+print(data.get('git_commit', 'unknown')[:7])
+" 2>/dev/null || echo "unknown")
+
+        echo "Update complete!"
+        echo "  Now running: $new_commit"
+
+        # Check migration status
+        local migration_status
+        migration_status=$(curl -sf "http://localhost:${DAEMON_PORT}/migrations/status" 2>/dev/null)
+        if [ $? -eq 0 ]; then
+            echo "$migration_status" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+version = data.get('current_version', 'unknown')
+print(f'  Schema version: v{version}')
+" 2>/dev/null
+        fi
+    else
+        log_error "Daemon failed to start after update"
+        echo ""
+        echo "To restore from backup:"
+        echo "  1. Find your backup in $DATA_PATH/backups/"
+        echo "  2. Run: rm -rf $DATA_PATH/db && cp -r $DATA_PATH/backups/<backup_name> $DATA_PATH/db"
+        echo "  3. Run: cortex daemon start"
+        return 1
+    fi
+}
+
+# --- Doctor Command ---
+
+doctor_essential() {
+    echo "Cortex Doctor (Essential Checks)"
+    echo "================================="
+    echo ""
+
+    local all_passed=true
+
+    # Check 1: Docker daemon
+    echo -n "Docker daemon: "
+    if docker info >/dev/null 2>&1; then
+        echo "OK"
+    else
+        echo "FAIL - Docker is not running"
+        all_passed=false
+    fi
+
+    # Check 2: Cortex container exists
+    echo -n "Cortex container: "
+    if docker ps -a --filter "name=^${DAEMON_CONTAINER_NAME}$" --format '{{.Names}}' | grep -q "^${DAEMON_CONTAINER_NAME}$"; then
+        if is_daemon_running; then
+            echo "OK (running)"
+        else
+            echo "WARN - Container exists but not running"
+        fi
+    else
+        echo "MISSING - Run 'cortex daemon start'"
+        all_passed=false
+    fi
+
+    # Check 3: Port availability
+    echo -n "Port $DAEMON_PORT: "
+    local port_user
+    port_user=$(lsof -i :$DAEMON_PORT -t 2>/dev/null | head -1)
+    if [ -z "$port_user" ]; then
+        if is_daemon_running; then
+            echo "WARN - Daemon running but port not bound"
+        else
+            echo "AVAILABLE"
+        fi
+    else
+        local port_process
+        port_process=$(ps -p "$port_user" -o comm= 2>/dev/null || echo "unknown")
+        if docker ps --filter "name=^${DAEMON_CONTAINER_NAME}$" --format '{{.Ports}}' 2>/dev/null | grep -q "$DAEMON_PORT"; then
+            echo "OK (used by cortex)"
+        else
+            echo "WARN - In use by $port_process (PID $port_user)"
+        fi
+    fi
+
+    # Check 4: Health endpoint
+    echo -n "Health endpoint: "
+    if curl -sf "http://localhost:${DAEMON_PORT}/health" >/dev/null 2>&1; then
+        echo "OK"
+    else
+        if is_daemon_running; then
+            echo "FAIL - Daemon running but /health unreachable"
+            all_passed=false
+        else
+            echo "SKIP - Daemon not running"
+        fi
+    fi
+
+    echo ""
+    if [ "$all_passed" = true ]; then
+        echo "All essential checks passed."
+        return 0
+    else
+        echo "Some checks failed. Run 'cortex doctor --verbose' for more details."
+        return 1
+    fi
+}
+
+doctor_comprehensive() {
+    echo "Cortex Doctor (Comprehensive)"
+    echo "=============================="
+    echo ""
+
+    # Run essential checks first
+    doctor_essential
+    local essential_status=$?
+    echo ""
+
+    echo "Extended Checks"
+    echo "---------------"
+
+    # Check 5: ChromaDB collection stats
+    echo -n "ChromaDB collection: "
+    local stats
+    stats=$(curl -sf "http://localhost:${HTTP_PORT}/browse/stats" 2>/dev/null)
+    if [ $? -eq 0 ]; then
+        local doc_count
+        doc_count=$(echo "$stats" | python3 -c "import json,sys; print(json.load(sys.stdin).get('total_documents', 0))" 2>/dev/null)
+        echo "OK ($doc_count documents)"
+    else
+        echo "WARN - Cannot fetch stats"
+    fi
+
+    # Check 6: Index/build info
+    echo -n "Build info: "
+    local info
+    info=$(curl -sf "http://localhost:${DAEMON_PORT}/info" 2>/dev/null)
+    if [ $? -eq 0 ]; then
+        echo "OK"
+        echo "$info" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+print(f\"  Commit: {data.get('git_commit', 'unknown')[:7]}\")
+print(f\"  Build: {data.get('build_time', 'unknown')}\")
+" 2>/dev/null
+    else
+        echo "WARN - Cannot fetch info"
+    fi
+
+    # Check 7: Settings file
+    echo -n "Settings file: "
+    if [ -f "$SETTINGS_FILE" ]; then
+        if python3 -c "import json; json.load(open('$SETTINGS_FILE'))" 2>/dev/null; then
+            echo "OK ($SETTINGS_FILE)"
+        else
+            echo "INVALID - JSON parse error"
+        fi
+    else
+        echo "MISSING - Run 'cortex init'"
+    fi
+
+    # Check 8: Data directory
+    echo -n "Data directory: "
+    if [ -d "$DATA_PATH" ]; then
+        local data_size
+        data_size=$(du -sh "$DATA_PATH" 2>/dev/null | cut -f1)
+        echo "OK ($DATA_PATH, $data_size)"
+    else
+        echo "MISSING"
+    fi
+
+    # Check 9: Disk space
+    echo -n "Disk space: "
+    local available_mb
+    available_mb=$(df -m "$DATA_PATH" 2>/dev/null | tail -1 | awk '{print $4}')
+    if [ -n "$available_mb" ] && [ "$available_mb" -gt 500 ]; then
+        echo "OK (${available_mb}MB available)"
+    elif [ -n "$available_mb" ]; then
+        echo "WARN - Low disk space (${available_mb}MB)"
+    else
+        echo "UNKNOWN"
+    fi
+
+    # Check 10: Schema version
+    echo -n "Schema version: "
+    local migration_status
+    migration_status=$(curl -sf "http://localhost:${DAEMON_PORT}/migrations/status" 2>/dev/null)
+    if [ $? -eq 0 ]; then
+        echo "$migration_status" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+current = data.get('current_version', 0)
+target = data.get('target_version', 0)
+if current == target:
+    print(f'OK (v{current})')
+else:
+    print(f'NEEDS MIGRATION (v{current} -> v{target})')
+" 2>/dev/null
+    else
+        echo "UNKNOWN"
+    fi
+
+    # Check 11: Local vs running version
+    echo -n "Version sync: "
+    local running_commit
+    local local_commit
+    running_commit=$(curl -sf "http://localhost:${DAEMON_PORT}/info" 2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin).get('git_commit','unknown')[:7])" 2>/dev/null || echo "unknown")
+    local_commit=$(git -C "$CORTEX_SRC_DIR" rev-parse --short HEAD 2>/dev/null || echo "unknown")
+    if [ "$running_commit" = "$local_commit" ]; then
+        echo "OK (both at $local_commit)"
+    elif [ "$running_commit" = "unknown" ] || [ "$local_commit" = "unknown" ]; then
+        echo "UNKNOWN"
+    else
+        echo "OUT OF SYNC (running: $running_commit, local: $local_commit)"
+        echo "  Run 'cortex update' to sync"
+    fi
+
+    echo ""
+    return $essential_status
+}
+
 # --- CLI Commands (bypass LLM) ---
 
 cli_search() {
@@ -740,6 +1047,8 @@ COMMANDS:
     search <query>      Search memory directly (bypasses LLM)
     save [opts] <text>  Save a note directly (bypasses LLM)
                         Options: -t <title>, -p <project>, --tags <a,b>
+    update              Update Cortex (pull, rebuild, migrate, restart)
+    doctor              Check system health (add --verbose for full check)
     init                Interactive setup, creates ~/.cortex/settings.json
     config              Show current configuration
     config edit         Open settings.json in $EDITOR
@@ -872,6 +1181,16 @@ case "${1:-}" in
     save)
         shift
         cli_save "$@"
+        ;;
+    update)
+        do_update
+        ;;
+    doctor)
+        if [ "${2:-}" = "--verbose" ] || [ "${2:-}" = "-v" ]; then
+            doctor_comprehensive
+        else
+            doctor_essential
+        fi
         ;;
     *)
         # Default: run stdio bridge (auto-starts daemon if needed)

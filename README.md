@@ -138,6 +138,13 @@ cortex daemon rebuild
 
 # Stop the daemon
 cortex daemon stop
+
+# Update Cortex (pull, rebuild, migrate, restart)
+cortex update
+
+# Health check
+cortex doctor              # Quick essential checks
+cortex doctor --verbose    # Comprehensive diagnostics
 ```
 
 ### Checking if Daemon is Up to Date
@@ -148,9 +155,9 @@ After pulling code changes or making local edits, verify the daemon is current:
 cortex daemon status
 ```
 
-This shows the daemon's git commit vs your local HEAD. If they differ, run `cortex daemon rebuild`.
+This shows the daemon's git commit vs your local HEAD. If they differ, run `cortex update` to pull latest changes, rebuild, and restart.
 
-You can also check from within a Claude Code session using the `get_cortex_version` MCP tool - just ask "is Cortex up to date?"
+You can also check from within a Claude Code session using `orient_session` - it now includes `update_available: true` when your local code is newer than the running daemon.
 
 ## MCP Tools
 
@@ -333,6 +340,95 @@ pip install -r requirements.txt
 pytest tests/ -v
 ```
 
+### Health Check
+
+Use the `doctor` command to verify your Cortex installation:
+
+```bash
+# Quick essential checks
+cortex doctor
+
+# Comprehensive diagnostics
+cortex doctor --verbose
+```
+
+### Updating Cortex
+
+Users can update their Cortex installation with a single command:
+
+```bash
+cortex update
+```
+
+This will:
+1. Create a backup of the database
+2. Pull the latest code (if installed via git clone)
+3. Rebuild the Docker image
+4. Run any pending migrations
+5. Restart the daemon
+
+### Creating a Release
+
+To create a new release:
+
+1. **Update version number** in `src/version.py`:
+   ```python
+   "version": "1.1.0",  # Update this
+   ```
+
+2. **Run the test suite**:
+   ```bash
+   pytest tests/ -v
+   ```
+
+3. **Commit and tag**:
+   ```bash
+   git add -A
+   git commit -m "Release v1.1.0"
+   git tag v1.1.0
+   git push origin main --tags
+   ```
+
+4. **Verify** users can update:
+   ```bash
+   cortex update
+   cortex doctor --verbose  # Should show new version
+   ```
+
+### Migration System
+
+Cortex uses schema versioning for database migrations:
+
+- **Schema version** is tracked in `~/.cortex/db/schema_version.json`
+- **Migrations run automatically** on daemon startup
+- **Backups are created** before each migration at `~/.cortex/backups/`
+
+To add a new migration:
+
+1. Increment `SCHEMA_VERSION` in `src/migrations/runner.py`
+2. Add migration function in `src/migrations/migrations.py`
+3. Register it in `get_migrations()` in `runner.py`
+
+```python
+# src/migrations/migrations.py
+def migration_002_add_new_field():
+    """Add new_field to all documents of type X."""
+    from src.tools.services import get_collection
+    collection = get_collection()
+    # ... migration logic
+```
+
+```python
+# src/migrations/runner.py
+SCHEMA_VERSION = 2  # Increment
+
+def get_migrations():
+    return [
+        (1, "Initial schema version tracking", m.migration_001_initial),
+        (2, "Add new field", m.migration_002_add_new_field),  # Add new migration
+    ]
+```
+
 ### Project Structure
 
 ```
@@ -340,6 +436,7 @@ Cortex/
 ├── cortex                 # Wrapper script (install to /usr/local/bin)
 ├── src/
 │   ├── server.py          # MCP server entry point
+│   ├── version.py         # Version checking and update detection
 │   ├── tools/             # MCP tool implementations
 │   │   ├── search.py      # search_cortex
 │   │   ├── ingest.py      # ingest_code_into_cortex
@@ -347,6 +444,7 @@ Cortex/
 │   │   ├── notes.py       # save_note, commit_to_cortex, insight_to_cortex
 │   │   ├── initiatives.py # create, list, focus, complete initiatives
 │   │   └── admin.py       # configure, toggle, get_version, get_skeleton
+│   ├── migrations/        # Schema versioning and database migrations
 │   ├── search/            # Hybrid search, BM25, reranker
 │   ├── ingest/            # AST chunking, delta sync, skeleton
 │   ├── storage/           # ChromaDB, garbage collection

@@ -159,6 +159,44 @@ def orient_session(
         if legacy_initiative:
             response["active_initiative"] = legacy_initiative
 
+        # Add version/update info
+        try:
+            from src.version import check_for_updates, get_current_version
+            import subprocess
+
+            current = get_current_version()
+            response["current_version"] = current["version"]
+            response["current_commit"] = (
+                current["git_commit"][:7]
+                if len(current["git_commit"]) >= 7
+                else current["git_commit"]
+            )
+
+            # Get local HEAD for comparison
+            local_head = None
+            try:
+                result = subprocess.run(
+                    ["git", "rev-parse", "HEAD"],
+                    cwd=project_path,
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                if result.returncode == 0:
+                    local_head = result.stdout.strip()
+            except Exception:
+                pass
+
+            update_info = check_for_updates(local_head=local_head)
+            if update_info.get("update_available"):
+                response["update_available"] = True
+                if update_info.get("latest_commit"):
+                    response["latest_commit"] = update_info["latest_commit"][:7]
+                if update_info.get("message"):
+                    response["update_message"] = update_info["message"]
+        except Exception as e:
+            logger.debug(f"Could not check for updates: {e}")
+
         logger.info(f"Orient complete: indexed={indexed}, needs_reindex={needs_reindex}")
 
         return json.dumps(response, indent=2)

@@ -249,3 +249,60 @@ def info() -> dict[str, str]:
         "startup_time": get_startup_time(),
         "version": "1.0.0",
     }
+
+
+# --- Migration/Admin Endpoints ---
+
+
+@router.get("/migrations/status")
+def migrations_status() -> dict[str, Any]:
+    """
+    Get current migration status.
+
+    Returns schema version info and whether migrations are needed.
+    """
+    from src.migrations import (
+        SCHEMA_VERSION,
+        get_current_schema_version,
+        needs_migration,
+    )
+
+    return {
+        "current_version": get_current_schema_version(),
+        "target_version": SCHEMA_VERSION,
+        "needs_migration": needs_migration(),
+    }
+
+
+@router.post("/admin/backup")
+def create_backup(label: Optional[str] = None) -> dict[str, Any]:
+    """
+    Create a database backup.
+
+    Args:
+        label: Optional label for the backup
+    """
+    from src.migrations import backup_database
+
+    try:
+        backup_path = backup_database(label=label or "manual")
+        return {
+            "status": "success",
+            "backup_path": backup_path,
+        }
+    except Exception as e:
+        logger.error(f"Backup failed: {e}")
+        return {
+            "status": "error",
+            "error": str(e),
+        }
+
+
+@router.get("/admin/backups")
+def get_backups() -> dict[str, Any]:
+    """List available backups."""
+    from src.migrations import list_backups
+
+    return {
+        "backups": list_backups(),
+    }
