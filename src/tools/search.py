@@ -89,6 +89,7 @@ def _filter_by_initiative(results: list, initiative_id: str, include_completed: 
 def build_branch_aware_filter(
     repository: Optional[str] = None,
     branches: Optional[list[str]] = None,
+    types: Optional[list[str]] = None,
 ) -> Optional[dict]:
     """
     Build ChromaDB where filter that applies branch filtering
@@ -99,10 +100,41 @@ def build_branch_aware_filter(
     Args:
         repository: Optional repository filter
         branches: List of branches to include for code/skeleton
+        types: Optional list of document types to include
 
     Returns:
         ChromaDB where filter dict, or None if no filtering needed
     """
+    # If explicit types requested, build type-aware filter
+    if types:
+        # Separate branch-filtered types from cross-branch types
+        branch_types = [t for t in types if t in ("code", "skeleton")]
+        non_branch_types = [t for t in types if t not in ("code", "skeleton")]
+
+        # Build type filter with proper branch handling
+        if branch_types and branches and branches != ["unknown"]:
+            # Mix of branch-filtered and non-branch types
+            conditions = []
+            if branch_types:
+                conditions.append({
+                    "$and": [
+                        {"type": {"$in": branch_types}},
+                        {"branch": {"$in": branches}}
+                    ]
+                })
+            if non_branch_types:
+                conditions.append({"type": {"$in": non_branch_types}})
+
+            type_filter = {"$or": conditions} if len(conditions) > 1 else conditions[0]
+        else:
+            # Only non-branch types, or no branch filtering needed
+            type_filter = {"type": {"$in": types}}
+
+        if repository:
+            return {"$and": [{"repository": repository}, type_filter]}
+        return type_filter
+
+    # No type filter: use existing branch-aware logic
     if not branches or branches == ["unknown"]:
         # No branch filtering if unknown
         return {"repository": repository} if repository else None
@@ -117,7 +149,7 @@ def build_branch_aware_filter(
                 {"branch": {"$in": branches}}
             ]},
             # Non-code types: always include (cross-branch)
-            {"type": {"$in": ["note", "commit", "tech_stack", "initiative"]}}
+            {"type": {"$in": ["note", "commit", "tech_stack", "initiative", "insight"]}}
         ]
     }
 
@@ -125,6 +157,12 @@ def build_branch_aware_filter(
         return {"$and": [{"repository": repository}, branch_filter]}
 
     return branch_filter
+
+
+# Valid document types for filtering
+VALID_TYPES = {"code", "skeleton", "note", "commit", "insight", "tech_stack", "initiative"}
+# Types that require branch filtering
+BRANCH_FILTERED_TYPES = {"code", "skeleton"}
 
 
 @dataclass
@@ -146,6 +184,7 @@ class SearchPipeline:
     branch: Optional[str] = None
     initiative: Optional[str] = None
     include_completed: bool = True
+    types: Optional[list[str]] = None
 
     # Resolved context (set during execution)
     _collection: object = field(default=None, repr=False)
@@ -249,6 +288,7 @@ class SearchPipeline:
         where_filter = build_branch_aware_filter(
             repository=self.repository,
             branches=self._branches,
+            types=self.types,
         )
 
         search_start = time.time()
@@ -516,6 +556,7 @@ def search_cortex(
     branch: Optional[str] = None,
     initiative: Optional[str] = None,
     include_completed: bool = True,
+    types: Optional[list[str]] = None,
 ) -> str:
     """
     Search the Cortex memory for relevant code, documentation, or notes.
@@ -528,10 +569,22 @@ def search_cortex(
                 Code/skeleton are filtered by branch; notes/commits are not.
         initiative: Optional initiative ID or name to filter results
         include_completed: Include content from completed initiatives (default: True)
+        types: Optional list of document types to include. Valid types:
+               code, skeleton, note, commit, insight, tech_stack, initiative.
+               Example: ["note", "insight"] for understanding-only search.
 
     Returns:
         JSON with search results including content, file paths, and scores
     """
+    # Validate types if provided
+    if types:
+        invalid_types = set(types) - VALID_TYPES
+        if invalid_types:
+            logger.warning(f"Invalid types ignored: {invalid_types}. Valid: {VALID_TYPES}")
+            types = [t for t in types if t in VALID_TYPES]
+            if not types:
+                types = None  # Fall back to no filtering if all invalid
+
     pipeline = SearchPipeline(
         query=query,
         repository=repository,
@@ -539,5 +592,6 @@ def search_cortex(
         branch=branch,
         initiative=initiative,
         include_completed=include_completed,
+        types=types,
     )
     return pipeline.execute()

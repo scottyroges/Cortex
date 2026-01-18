@@ -60,6 +60,11 @@ MCP_TOOL_SCHEMAS = [
                 "branch": {"type": "string", "description": "Optional branch filter"},
                 "initiative": {"type": "string", "description": "Initiative ID or name to filter results"},
                 "include_completed": {"type": "boolean", "default": True, "description": "Include content from completed initiatives"},
+                "types": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Filter by document types. Valid: code, skeleton, note, commit, insight, tech_stack, initiative. Example: ['note', 'insight'] for understanding-only search.",
+                },
             },
             "required": ["query"],
         },

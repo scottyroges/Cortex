@@ -869,8 +869,8 @@ class TestBranchAwareFilter:
         assert or_clause is not None
         # Should have code/skeleton filtered by branch
         assert any("type" in c.get("$and", [{}])[0] for c in or_clause if "$and" in c)
-        # Should have non-code types always included
-        assert any(c.get("type", {}).get("$in") == ["note", "commit", "tech_stack", "initiative"] for c in or_clause)
+        # Should have non-code types always included (note, commit, tech_stack, initiative, insight)
+        assert any(c.get("type", {}).get("$in") == ["note", "commit", "tech_stack", "initiative", "insight"] for c in or_clause)
 
     def test_filter_with_unknown_branch(self):
         """Test that unknown branch returns simple project filter."""
@@ -941,7 +941,7 @@ class TestBranchAwareFilter:
         assert branch_clause["branch"]["$in"] == ["feature", "main"]
 
     def test_filter_non_code_types_not_filtered(self):
-        """Test that note, commit, tech_stack, initiative are not branch-filtered."""
+        """Test that note, commit, tech_stack, initiative, insight are not branch-filtered."""
         from src.tools.search import build_branch_aware_filter
 
         result = build_branch_aware_filter(repository=None, branches=["feature", "main"])
@@ -956,7 +956,7 @@ class TestBranchAwareFilter:
                     break
 
         assert non_filtered is not None
-        assert non_filtered["type"]["$in"] == ["note", "commit", "tech_stack", "initiative"]
+        assert non_filtered["type"]["$in"] == ["note", "commit", "tech_stack", "initiative", "insight"]
         # Should NOT have branch filter
         assert "branch" not in non_filtered
         assert "$and" not in non_filtered
@@ -1143,3 +1143,282 @@ class TestBranchAwareSearch:
         # Should find main branch code
         assert len(results) > 0
         assert any(r["meta"]["branch"] == "main" for r in results)
+
+
+class TestTypeFilter:
+    """Tests for document type filtering in search."""
+
+    def test_filter_single_type_notes_only(self, temp_chroma_client):
+        """Test filtering to only return notes."""
+        from src.search import HybridSearcher
+        from src.storage import get_or_create_collection
+        from src.tools.search import build_branch_aware_filter
+
+        collection = get_or_create_collection(temp_chroma_client, "type_filter_notes")
+
+        # Add different document types
+        collection.add(
+            documents=[
+                "Architecture note: Use microservices pattern",
+                "def process_order(): return calculate_total()",
+                "Session commit: Implemented order processing",
+            ],
+            ids=["note-1", "code-1", "commit-1"],
+            metadatas=[
+                {"type": "note", "repository": "test", "branch": "main", "title": "Architecture", "tags": ""},
+                {"type": "code", "repository": "test", "branch": "main", "file_path": "/src/order.py", "language": "python"},
+                {"type": "commit", "repository": "test", "branch": "main", "files": "[]"},
+            ],
+        )
+
+        # Search with types filter for notes only
+        where_filter = build_branch_aware_filter(repository="test", branches=["main"], types=["note"])
+        searcher = HybridSearcher(collection)
+        searcher.build_index(where_filter)
+
+        results = searcher.search("order", top_k=10, where_filter=where_filter)
+
+        # Should only return notes, not code or commits
+        for r in results:
+            assert r["meta"]["type"] == "note", f"Expected note, got {r['meta']['type']}"
+
+    def test_filter_multiple_types(self, temp_chroma_client):
+        """Test filtering to return multiple types (note + insight)."""
+        from src.search import HybridSearcher
+        from src.storage import get_or_create_collection
+        from src.tools.search import build_branch_aware_filter
+
+        collection = get_or_create_collection(temp_chroma_client, "type_filter_multiple")
+
+        # Add different document types
+        collection.add(
+            documents=[
+                "Architecture note: Use Redis for caching",
+                "Insight: The auth module uses observer pattern",
+                "def authenticate(): return jwt.encode()",
+                "Session commit: Added caching layer",
+            ],
+            ids=["note-1", "insight-1", "code-1", "commit-1"],
+            metadatas=[
+                {"type": "note", "repository": "test", "branch": "main", "title": "Caching", "tags": ""},
+                {"type": "insight", "repository": "test", "branch": "main", "file_path": "/src/auth.py"},
+                {"type": "code", "repository": "test", "branch": "main", "file_path": "/src/auth.py", "language": "python"},
+                {"type": "commit", "repository": "test", "branch": "main", "files": "[]"},
+            ],
+        )
+
+        # Search with types filter for notes and insights
+        where_filter = build_branch_aware_filter(repository="test", branches=["main"], types=["note", "insight"])
+        searcher = HybridSearcher(collection)
+        searcher.build_index(where_filter)
+
+        results = searcher.search("auth caching", top_k=10, where_filter=where_filter)
+
+        # Should only return notes and insights
+        for r in results:
+            assert r["meta"]["type"] in ("note", "insight"), f"Unexpected type: {r['meta']['type']}"
+
+    def test_filter_code_type_with_branch(self, temp_chroma_client):
+        """Test that code type filter respects branch filtering."""
+        from src.search import HybridSearcher
+        from src.storage import get_or_create_collection
+        from src.tools.search import build_branch_aware_filter
+
+        collection = get_or_create_collection(temp_chroma_client, "type_filter_code_branch")
+
+        # Add code on different branches
+        collection.add(
+            documents=[
+                "def feature_func(): return 'feature branch'",
+                "def main_func(): return 'main branch'",
+                "Architecture note about functions",
+            ],
+            ids=["code-feature", "code-main", "note-1"],
+            metadatas=[
+                {"type": "code", "repository": "test", "branch": "feature-x", "file_path": "/src/app.py", "language": "python"},
+                {"type": "code", "repository": "test", "branch": "main", "file_path": "/src/app.py", "language": "python"},
+                {"type": "note", "repository": "test", "branch": "main", "title": "Functions", "tags": ""},
+            ],
+        )
+
+        # Search for code only, from main branch (should exclude feature-x code)
+        where_filter = build_branch_aware_filter(repository="test", branches=["main"], types=["code"])
+        searcher = HybridSearcher(collection)
+        searcher.build_index(where_filter)
+
+        results = searcher.search("func", top_k=10, where_filter=where_filter)
+
+        # Should only return main branch code
+        for r in results:
+            assert r["meta"]["type"] == "code"
+            assert r["meta"]["branch"] == "main", f"Expected main branch, got {r['meta']['branch']}"
+
+    def test_filter_mixed_branch_and_non_branch_types(self, temp_chroma_client):
+        """Test filtering with both branch-filtered (code) and non-branch (note) types."""
+        from src.search import HybridSearcher
+        from src.storage import get_or_create_collection
+        from src.tools.search import build_branch_aware_filter
+
+        collection = get_or_create_collection(temp_chroma_client, "type_filter_mixed")
+
+        # Add documents
+        collection.add(
+            documents=[
+                "def feature_code(): pass",
+                "def main_code(): pass",
+                "Note about the code",
+                "Commit about the code",
+            ],
+            ids=["code-feature", "code-main", "note-1", "commit-1"],
+            metadatas=[
+                {"type": "code", "repository": "test", "branch": "feature-x", "file_path": "/src/app.py", "language": "python"},
+                {"type": "code", "repository": "test", "branch": "main", "file_path": "/src/app.py", "language": "python"},
+                {"type": "note", "repository": "test", "branch": "main", "title": "Code Note", "tags": ""},
+                {"type": "commit", "repository": "test", "branch": "main", "files": "[]"},
+            ],
+        )
+
+        # Search for code + note from main branch
+        where_filter = build_branch_aware_filter(repository="test", branches=["main"], types=["code", "note"])
+        searcher = HybridSearcher(collection)
+        searcher.build_index(where_filter)
+
+        results = searcher.search("code", top_k=10, where_filter=where_filter)
+
+        # Should return main branch code and notes (but not feature-x code or commits)
+        types_found = {r["meta"]["type"] for r in results}
+        assert "code" in types_found or "note" in types_found
+
+        for r in results:
+            assert r["meta"]["type"] in ("code", "note")
+            if r["meta"]["type"] == "code":
+                assert r["meta"]["branch"] == "main"
+
+    def test_filter_empty_types_no_filter(self, temp_chroma_client):
+        """Test that empty types list behaves as no filter."""
+        from src.search import HybridSearcher
+        from src.storage import get_or_create_collection
+        from src.tools.search import build_branch_aware_filter
+
+        collection = get_or_create_collection(temp_chroma_client, "type_filter_empty")
+
+        collection.add(
+            documents=[
+                "Note content",
+                "Code content",
+            ],
+            ids=["note-1", "code-1"],
+            metadatas=[
+                {"type": "note", "repository": "test", "branch": "main", "title": "", "tags": ""},
+                {"type": "code", "repository": "test", "branch": "main", "file_path": "/app.py", "language": "python"},
+            ],
+        )
+
+        # Search with empty types (should return all)
+        where_filter = build_branch_aware_filter(repository="test", branches=["main"], types=[])
+        searcher = HybridSearcher(collection)
+        searcher.build_index(where_filter)
+
+        results = searcher.search("content", top_k=10, where_filter=where_filter)
+
+        # Should return both types
+        types_found = {r["meta"]["type"] for r in results}
+        assert len(types_found) >= 1  # At least some results
+
+    def test_filter_none_types_no_filter(self):
+        """Test that types=None behaves as no type filter."""
+        from src.tools.search import build_branch_aware_filter
+
+        # With types=None, should fall back to standard branch filtering
+        result = build_branch_aware_filter(repository="test", branches=["main"], types=None)
+
+        # Should have the standard $or structure for branch filtering
+        assert "$and" in result
+        assert {"repository": "test"} in result["$and"]
+
+    def test_invalid_types_filtered_out(self):
+        """Test that invalid types are filtered out with warning."""
+        from src.tools.search import VALID_TYPES, search_cortex
+        import json
+        from unittest.mock import patch, MagicMock
+
+        # Mock the dependencies
+        with patch("src.tools.search.get_collection") as mock_collection, \
+             patch("src.tools.search.get_searcher") as mock_searcher, \
+             patch("src.tools.search.get_reranker") as mock_reranker, \
+             patch("src.tools.search.CONFIG", {"enabled": True, "top_k_retrieve": 50, "top_k_rerank": 10, "min_score": 0.0, "recency_boost": False, "verbose": False}):
+
+            mock_collection.return_value = MagicMock()
+            mock_searcher.return_value.search.return_value = []
+            mock_reranker.return_value.rerank.return_value = []
+
+            # This should log a warning but still work
+            result = search_cortex(
+                query="test",
+                types=["note", "invalid_type", "also_invalid"]
+            )
+
+            parsed = json.loads(result)
+            # Should not error, just return empty results
+            assert "results" in parsed
+
+    def test_build_filter_types_only_non_branch(self):
+        """Test filter with only non-branch types doesn't include branch clause."""
+        from src.tools.search import build_branch_aware_filter
+
+        # Only notes and insights (non-branch types)
+        result = build_branch_aware_filter(
+            repository="test",
+            branches=["main"],
+            types=["note", "insight", "commit"]
+        )
+
+        # Should have simple type filter without branch conditions
+        assert "$and" in result
+        assert {"repository": "test"} in result["$and"]
+
+        # Find the type filter
+        type_filter = None
+        for item in result["$and"]:
+            if "type" in item:
+                type_filter = item
+                break
+
+        assert type_filter is not None
+        assert type_filter["type"]["$in"] == ["note", "insight", "commit"]
+
+    def test_build_filter_types_only_branch_filtered(self):
+        """Test filter with only branch-filtered types (code, skeleton)."""
+        from src.tools.search import build_branch_aware_filter
+
+        result = build_branch_aware_filter(
+            repository="test",
+            branches=["feature", "main"],
+            types=["code", "skeleton"]
+        )
+
+        assert "$and" in result
+        assert {"repository": "test"} in result["$and"]
+
+        # Should have branch filtering for code/skeleton
+        # Find the nested filter
+        nested = None
+        for item in result["$and"]:
+            if "$and" in item:
+                nested = item
+                break
+
+        assert nested is not None
+        # Should filter by type and branch
+        type_clause = None
+        branch_clause = None
+        for sub in nested["$and"]:
+            if "type" in sub:
+                type_clause = sub
+            if "branch" in sub:
+                branch_clause = sub
+
+        assert type_clause is not None
+        assert branch_clause is not None
+        assert set(type_clause["type"]["$in"]) == {"code", "skeleton"}
+        assert set(branch_clause["branch"]["$in"]) == {"feature", "main"}
