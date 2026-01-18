@@ -23,7 +23,10 @@ ENV CORTEX_GIT_COMMIT=$GIT_COMMIT
 ENV CORTEX_BUILD_TIME=$BUILD_TIME
 
 # Install git for branch detection and build-essential for Chroma/Numpy
-RUN apt-get update && apt-get install -y build-essential git && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential git \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install dependencies (cached)
 COPY requirements.txt .
