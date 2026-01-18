@@ -32,6 +32,7 @@ Cortex fills this gap by storing:
 | **Initiative Tracking** | ✅ Strong | Multi-session work with summaries |
 | **Session Recall** | ✅ Good | "What did I work on?" queries |
 | **Staleness Detection** | ✅ Good | Insights validated against file changes |
+| **Installation & Updates** | ✅ Good | `cortex update`, `cortex doctor`, migrations |
 | **Code Indexing** | ⚠️ Marginal | Only ~20-30% of queries benefit over Grep |
 | **Automatic Capture** | ❌ Gap | Too manual, unreliable |
 | **Structural Knowledge** | ❌ Gap | No dependencies, entry points, importance |
@@ -83,17 +84,16 @@ Cortex fills this gap by storing:
 | **Search Preview** | ✅ | Interactive search with result preview |
 | **Edit/Delete** | ✅ | Modify or remove stored memories |
 
-### Installation & Updates (High Priority)
+### Installation & Updates ✅
 
-*Zero-friction onboarding and maintenance.*
+*Zero-friction onboarding and maintenance - complete.*
 
-| Feature | Description | Value |
-|---------|-------------|-------|
-| **One-Line Installer** | `curl -fsSL https://get.cortex.dev \| bash` - Downloads, configures Claude Code MCP settings, pulls Docker image. | Zero-friction onboarding |
-| **Auto-Update Check** | `orient_session` returns `update_available: true` when newer version exists. Prompt user to update. | Users stay current without manual checking |
-| **`cortex update`** | Single command pulls latest image, migrates data if needed, restarts daemon. | Painless updates |
-| **Health Check** | `cortex doctor` - Verify Docker running, ports available, ChromaDB accessible, MCP connection working. | Debug installation issues |
-| **Migration System** | Detect schema version, auto-run migrations on startup. Backup before migrate. | Breaking changes don't break users |
+| Feature | Status | Description |
+|---------|--------|-------------|
+| **Auto-Update Check** | ✅ | `orient_session` returns `update_available: true` when local code differs from daemon |
+| **`cortex update`** | ✅ | Single command backs up, pulls, rebuilds, migrates, and restarts |
+| **Health Check** | ✅ | `cortex doctor` (essential) and `cortex doctor --verbose` (comprehensive) |
+| **Migration System** | ✅ | Schema versioning with auto-migrations on startup, auto-backup before migrate |
 
 ### Auto-Capture (Medium Priority)
 
@@ -110,6 +110,7 @@ Cortex fills this gap by storing:
 
 | Feature | Description | Value |
 |---------|-------------|-------|
+| **One-Line Installer** | `curl -fsSL https://get.cortex.dev \| bash` - Downloads, configures Claude Code MCP settings, pulls Docker image. | Zero-friction onboarding |
 | **Homebrew Formula** | `brew install cortex-memory` - Native package for macOS users. | Platform-native experience |
 | **Version Pinning** | Allow users to pin to specific version in config. | Stability for production use |
 | **Linux/Windows Packages** | apt/dnf packages, WSL2 support | Broader platform support |
