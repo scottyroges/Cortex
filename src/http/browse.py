@@ -197,9 +197,8 @@ def browse_search(
 
     searcher = get_searcher()
 
-    # Rebuild index for accurate results
     search_start = time.time()
-    results = searcher.search(q, top_k=limit, rebuild_index=True)
+    results = searcher.search(q, top_k=limit)
     search_time = time.time() - search_start
 
     response = {

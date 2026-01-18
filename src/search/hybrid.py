@@ -5,6 +5,7 @@ Combines vector search and BM25 using Reciprocal Rank Fusion.
 """
 
 import time
+from threading import RLock
 from typing import Any, Optional
 
 import chromadb
@@ -67,6 +68,12 @@ class HybridSearcher:
         self.collection = collection
         self.bm25_index = BM25Index()
         self._index_built = False
+        self._index_lock = RLock()
+
+    def invalidate(self) -> None:
+        """Mark the BM25 index as stale, requiring rebuild on next search."""
+        with self._index_lock:
+            self._index_built = False
 
     def build_index(self, where_filter: Optional[dict] = None) -> None:
         """
@@ -75,8 +82,9 @@ class HybridSearcher:
         Args:
             where_filter: Optional filter for documents
         """
-        self.bm25_index.build_from_collection(self.collection, where_filter)
-        self._index_built = True
+        with self._index_lock:
+            self.bm25_index.build_from_collection(self.collection, where_filter)
+            self._index_built = True
 
     def search(
         self,
@@ -97,9 +105,11 @@ class HybridSearcher:
         Returns:
             Combined results with RRF scores
         """
-        # Rebuild index if needed
-        if rebuild_index or not self._index_built:
-            self.build_index(where_filter)
+        # Rebuild index if needed (thread-safe check)
+        with self._index_lock:
+            if rebuild_index or not self._index_built:
+                self.bm25_index.build_from_collection(self.collection, where_filter)
+                self._index_built = True
 
         # Vector search
         vector_start = time.time()

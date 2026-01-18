@@ -296,7 +296,6 @@ class SearchPipeline:
             query=self.query,
             top_k=CONFIG["top_k_retrieve"],
             where_filter=where_filter,
-            rebuild_index=True,
         )
         search_time = time.time() - search_start
         logger.debug(f"Hybrid search: {len(candidates)} candidates in {search_time*1000:.1f}ms")

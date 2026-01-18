@@ -434,3 +434,129 @@ class TestRecencyBoost:
 
         # Newer note should now be first despite lower original score
         assert boosted[0]["meta"]["created_at"] == new_time
+
+
+class TestConditionalIndexRebuild:
+    """Tests for conditional BM25 index rebuild (caching behavior)."""
+
+    def test_index_not_rebuilt_on_repeated_search(self, temp_chroma_client):
+        """Index should not rebuild on subsequent searches when not invalidated."""
+        collection = get_or_create_collection(temp_chroma_client, "test_cache")
+        collection.add(
+            documents=["Python programming", "JavaScript web"],
+            ids=["1", "2"],
+            metadatas=[{"type": "test"}] * 2,
+        )
+
+        searcher = HybridSearcher(collection)
+        searcher.build_index()  # Initial build
+
+        # Track if build_from_collection is called
+        build_count = [0]
+        original_build = searcher.bm25_index.build_from_collection
+
+        def counting_build(*args, **kwargs):
+            build_count[0] += 1
+            return original_build(*args, **kwargs)
+
+        searcher.bm25_index.build_from_collection = counting_build
+
+        # Multiple searches should NOT rebuild
+        searcher.search("Python")
+        searcher.search("JavaScript")
+        searcher.search("test query")
+
+        assert build_count[0] == 0, "Index should not rebuild on repeated searches"
+
+    def test_index_rebuilt_after_invalidate(self, temp_chroma_client):
+        """Index should rebuild after explicit invalidation."""
+        collection = get_or_create_collection(temp_chroma_client, "test_invalidate")
+        collection.add(
+            documents=["document one", "document two"],
+            ids=["1", "2"],
+            metadatas=[{"type": "test"}] * 2,
+        )
+
+        searcher = HybridSearcher(collection)
+        searcher.build_index()
+
+        # Track rebuilds
+        build_count = [0]
+        original_build = searcher.bm25_index.build_from_collection
+
+        def counting_build(*args, **kwargs):
+            build_count[0] += 1
+            return original_build(*args, **kwargs)
+
+        searcher.bm25_index.build_from_collection = counting_build
+
+        # Invalidate and search
+        searcher.invalidate()
+        searcher.search("test")
+
+        assert build_count[0] == 1, "Index should rebuild after invalidation"
+
+    def test_rebuild_index_flag_forces_rebuild(self, temp_chroma_client):
+        """rebuild_index=True should force a rebuild."""
+        collection = get_or_create_collection(temp_chroma_client, "test_force")
+        collection.add(
+            documents=["test document"],
+            ids=["1"],
+            metadatas=[{"type": "test"}],
+        )
+
+        searcher = HybridSearcher(collection)
+        searcher.build_index()
+
+        build_count = [0]
+        original_build = searcher.bm25_index.build_from_collection
+
+        def counting_build(*args, **kwargs):
+            build_count[0] += 1
+            return original_build(*args, **kwargs)
+
+        searcher.bm25_index.build_from_collection = counting_build
+
+        # Force rebuild
+        searcher.search("test", rebuild_index=True)
+
+        assert build_count[0] == 1, "rebuild_index=True should force rebuild"
+
+    def test_thread_safety(self, temp_chroma_client):
+        """Multiple threads should not cause race conditions."""
+        import threading
+
+        collection = get_or_create_collection(temp_chroma_client, "test_threads")
+        collection.add(
+            documents=["doc " + str(i) for i in range(10)],
+            ids=[str(i) for i in range(10)],
+            metadatas=[{"type": "test"}] * 10,
+        )
+
+        searcher = HybridSearcher(collection)
+        errors = []
+
+        def search_thread():
+            try:
+                for _ in range(5):
+                    searcher.search("test")
+            except Exception as e:
+                errors.append(e)
+
+        def invalidate_thread():
+            try:
+                for _ in range(5):
+                    searcher.invalidate()
+            except Exception as e:
+                errors.append(e)
+
+        threads = [threading.Thread(target=search_thread) for _ in range(3)] + [
+            threading.Thread(target=invalidate_thread) for _ in range(2)
+        ]
+
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert len(errors) == 0, f"Thread safety errors: {errors}"

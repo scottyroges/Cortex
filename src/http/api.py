@@ -135,7 +135,7 @@ def search(
 
     # Search
     searcher = get_searcher()
-    results = searcher.search(q, top_k=50, where_filter=where_filter, rebuild_index=True)
+    results = searcher.search(q, top_k=50, where_filter=where_filter)
 
     # Rerank
     reranker = get_reranker()
