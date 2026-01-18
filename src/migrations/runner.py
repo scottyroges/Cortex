@@ -11,6 +11,7 @@ from typing import Callable, Optional
 
 from logging_config import get_logger
 from src.config import DB_PATH
+from src.migrations.backup import backup_database, restore_database
 
 logger = get_logger("migrations")
 
@@ -117,6 +118,19 @@ def run_migrations(
 
     results = []
     final_version = current
+    backup_path = None
+    rolled_back = False
+
+    # Create backup before migrations (unless dry run)
+    if not dry_run:
+        try:
+            backup_path = backup_database(label="pre-migration")
+            logger.info(f"Created pre-migration backup: {backup_path}")
+        except FileNotFoundError:
+            # No database yet, nothing to backup
+            logger.debug("No database to backup (first run)")
+        except Exception as e:
+            logger.warning(f"Failed to create backup: {e}")
 
     for version, description, migration_fn in pending:
         logger.info(f"Running migration {version}: {description}")
@@ -134,12 +148,28 @@ def run_migrations(
         except Exception as e:
             logger.error(f"Migration {version} failed: {e}")
             results.append({"version": version, "description": description, "status": "failed", "error": str(e)})
+
+            # Rollback to pre-migration state
+            if backup_path:
+                try:
+                    logger.info("Rolling back to pre-migration state")
+                    restore_database(backup_path)
+                    final_version = current  # Reset to original version
+                    rolled_back = True
+                    results[-1]["status"] = "failed_rolled_back"
+                    logger.info("Rollback complete")
+                except Exception as restore_error:
+                    logger.error(f"Rollback failed: {restore_error}")
+                    results[-1]["rollback_error"] = str(restore_error)
             break
 
+    status = "complete" if final_version == SCHEMA_VERSION else ("rolled_back" if rolled_back else "partial")
     return {
-        "status": "complete" if final_version == SCHEMA_VERSION else "partial",
+        "status": status,
         "current_version": final_version,
         "target_version": SCHEMA_VERSION,
         "migrations_run": len([r for r in results if r["status"] == "success"]),
         "results": results,
+        "backup_path": backup_path,
+        "rolled_back": rolled_back,
     }

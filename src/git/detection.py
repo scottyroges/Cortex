@@ -4,8 +4,9 @@ Git Detection Utilities
 Functions for detecting git repositories and retrieving git information.
 """
 
-import subprocess
 from typing import Optional
+
+from src.git.subprocess_utils import git_check, git_count_lines, git_single_line
 
 
 def is_git_repo(path: str) -> bool:
@@ -18,17 +19,7 @@ def is_git_repo(path: str) -> bool:
     Returns:
         True if path is in a git repository
     """
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--git-dir"],
-            cwd=path,
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        return result.returncode == 0
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        return False
+    return git_check(["rev-parse", "--git-dir"], path)
 
 
 def get_head_commit(path: str) -> Optional[str]:
@@ -41,19 +32,7 @@ def get_head_commit(path: str) -> Optional[str]:
     Returns:
         Commit hash or None if not a git repo
     """
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=path,
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if result.returncode == 0:
-            return result.stdout.strip()
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        pass
-    return None
+    return git_single_line(["rev-parse", "HEAD"], path)
 
 
 def get_git_info(path: str) -> tuple[Optional[str], bool, Optional[str]]:
@@ -66,42 +45,15 @@ def get_git_info(path: str) -> tuple[Optional[str], bool, Optional[str]]:
     Returns:
         Tuple of (branch_name, is_git_repo, repo_root)
     """
-    try:
-        # Check if in a git repo
-        result = subprocess.run(
-            ["git", "rev-parse", "--git-dir"],
-            cwd=path,
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if result.returncode != 0:
-            return None, False, None
-
-        # Get current branch
-        branch_result = subprocess.run(
-            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-            cwd=path,
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-
-        # Get repo root
-        root_result = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            cwd=path,
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-
-        branch = branch_result.stdout.strip() if branch_result.returncode == 0 else None
-        repo_root = root_result.stdout.strip() if root_result.returncode == 0 else None
-
-        return branch, True, repo_root
-    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+    # Check if in a git repo
+    if not git_check(["rev-parse", "--git-dir"], path):
         return None, False, None
+
+    # Get current branch and repo root
+    branch = git_single_line(["rev-parse", "--abbrev-ref", "HEAD"], path)
+    repo_root = git_single_line(["rev-parse", "--show-toplevel"], path)
+
+    return branch, True, repo_root
 
 
 def get_current_branch(path: str) -> str:
@@ -129,20 +81,11 @@ def get_commits_since(path: str, since_timestamp: str) -> int:
     Returns:
         Number of commits since timestamp
     """
-    try:
-        result = subprocess.run(
-            ["git", "log", "--oneline", f"--since={since_timestamp}"],
-            cwd=path,
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if result.returncode == 0:
-            lines = result.stdout.strip().split("\n")
-            return len([line for line in lines if line])
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        pass
-    return 0
+    return git_count_lines(
+        ["log", "--oneline", f"--since={since_timestamp}"],
+        path,
+        timeout=10,
+    )
 
 
 def get_merge_commits_since(path: str, since_timestamp: str) -> int:
@@ -156,20 +99,11 @@ def get_merge_commits_since(path: str, since_timestamp: str) -> int:
     Returns:
         Number of merge commits since timestamp
     """
-    try:
-        result = subprocess.run(
-            ["git", "log", "--oneline", "--merges", f"--since={since_timestamp}"],
-            cwd=path,
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if result.returncode == 0:
-            lines = result.stdout.strip().split("\n")
-            return len([line for line in lines if line])
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        pass
-    return 0
+    return git_count_lines(
+        ["log", "--oneline", "--merges", f"--since={since_timestamp}"],
+        path,
+        timeout=10,
+    )
 
 
 def count_tracked_files(path: str) -> int:
@@ -182,17 +116,4 @@ def count_tracked_files(path: str) -> int:
     Returns:
         Number of tracked files
     """
-    try:
-        result = subprocess.run(
-            ["git", "ls-files"],
-            cwd=path,
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        if result.returncode == 0:
-            lines = result.stdout.strip().split("\n")
-            return len([line for line in lines if line])
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        pass
-    return 0
+    return git_count_lines(["ls-files"], path, timeout=30)

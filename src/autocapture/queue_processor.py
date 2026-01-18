@@ -6,6 +6,8 @@ and saving to Cortex without blocking Claude Code session exit.
 """
 
 import json
+import os
+import tempfile
 import threading
 import time
 from datetime import datetime, timezone
@@ -100,10 +102,19 @@ class QueueProcessor:
                 except Exception as e:
                     logger.error(f"Error processing session {session_id}: {e}")
 
-            # Remove processed sessions from queue
+            # Remove processed sessions from queue (atomic write)
             if processed_ids:
                 remaining = [s for s in queue if s.get("session_id") not in processed_ids]
-                QUEUE_FILE.write_text(json.dumps(remaining, indent=2))
+                # Atomic write: write to temp file, then rename
+                fd, tmp_path = tempfile.mkstemp(dir=str(QUEUE_FILE.parent))
+                try:
+                    with os.fdopen(fd, "w") as f:
+                        json.dump(remaining, f, indent=2)
+                    os.replace(tmp_path, str(QUEUE_FILE))
+                except Exception:
+                    if os.path.exists(tmp_path):
+                        os.unlink(tmp_path)
+                    raise
                 logger.info(f"Removed {len(processed_ids)} processed sessions from queue")
 
     def _process_session(self, session: dict) -> bool:
