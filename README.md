@@ -5,11 +5,13 @@ A local, privacy-first memory system for Claude Code. Provides RAG capabilities 
 ## Features
 
 - **Hybrid Search**: Vector + BM25 with Reciprocal Rank Fusion, then FlashRank cross-encoder reranking
+- **Semantic Memory**: Insights, notes, and session commits that capture understanding
+- **Initiative Tracking**: Multi-session work with focus system and progress summaries
 - **AST-Aware Chunking**: Respects function/class boundaries for 20+ languages
-- **Delta Sync**: Only re-indexes changed files (MD5 hash tracking)
+- **Delta Sync**: Only re-indexes changed files (git-based change detection)
 - **Secret Scrubbing**: Automatically redacts API keys, tokens, and credentials
-- **Git-Aware**: Filters search results by current branch + main/master
-- **Contextual Headers**: Optional Claude Haiku summaries for each chunk
+- **Memory Browser**: Web UI at `http://localhost:8080` for exploring stored memories
+- **Auto-Update**: `cortex update` command with migrations and health checks
 
 ## Quick Start
 
@@ -207,6 +209,12 @@ You can also check from within a Claude Code session using `orient_session` - it
 - Claude should re-read linked files before trusting stale insights
 - Use `validate_insight` to mark insights as still valid (refreshes hashes) or deprecated
 
+### Session Tools
+
+| Tool | Description |
+|------|-------------|
+| `orient_session` | Entry point for sessions - returns index status, context, initiatives, and update availability |
+
 ### Admin Tools
 
 | Tool | Description |
@@ -303,9 +311,20 @@ cortex daemon restart
 tail -f ~/.cortex/cortex.log
 ```
 
-### HTTP Debug Server
+### HTTP Server & Memory Browser
 
-The HTTP debug server runs on port 8080 by default when the daemon is running.
+The HTTP server runs on port 8080 by default when the daemon is running.
+
+**Memory Browser**: Visit `http://localhost:8080` to explore stored memories with a web UI.
+
+API endpoints:
+- `GET /search?q=X&limit=5` - Search with reranking
+- `POST /ingest` - Ingest web content
+- `POST /note` - Save a note
+- `GET /info` - Build info and version
+- `GET /migrations/status` - Schema version info
+- `POST /admin/backup` - Create database backup
+- `GET /admin/backups` - List available backups
 
 Debug endpoints:
 - `GET /debug/stats` - Collection statistics by repository/type/language
@@ -314,10 +333,10 @@ Debug endpoints:
 - `GET /debug/get/{doc_id}` - Get specific document
 - `GET /debug/search?q=X` - Raw search with timing info
 
-Phase 2 endpoints (for CLI/Web Clipper):
-- `GET /search?q=X&limit=5` - Search with reranking
-- `POST /ingest` - Ingest web content
-- `POST /note` - Save a note
+Browse endpoints (for Memory Browser):
+- `GET /browse/stats` - Memory statistics
+- `GET /browse/documents` - Paginated document list
+- `GET /browse/document/{doc_id}` - Document details
 
 ## Troubleshooting
 
@@ -438,11 +457,13 @@ Cortex/
 │   ├── server.py          # MCP server entry point
 │   ├── version.py         # Version checking and update detection
 │   ├── tools/             # MCP tool implementations
+│   │   ├── orient.py      # orient_session (session entry point)
 │   │   ├── search.py      # search_cortex
 │   │   ├── ingest.py      # ingest_code_into_cortex
 │   │   ├── context.py     # set_repo_context, get_context
 │   │   ├── notes.py       # save_note, commit_to_cortex, insight_to_cortex
 │   │   ├── initiatives.py # create, list, focus, complete initiatives
+│   │   ├── recall.py      # recall_recent_work, summarize_initiative
 │   │   └── admin.py       # configure, toggle, get_version, get_skeleton
 │   ├── migrations/        # Schema versioning and database migrations
 │   ├── search/            # Hybrid search, BM25, reranker
