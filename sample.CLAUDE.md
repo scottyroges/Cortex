@@ -1,6 +1,8 @@
 # CORTEX MEMORY PROTOCOL
 
 You have long-term memory via Cortex. You are not stateless. You persist knowledge.
+Use cortex to find understandings and insights about the codebase. Use this to inform your decisions.
+Use it in conjunction with your own file searches to get a complete picture of the codebase.
 
 ## Workflow
 
@@ -101,6 +103,7 @@ When search returns old insights with `verification_warning`:
 - Architectural decisions and their rationale
 - Non-obvious patterns in the codebase
 - Gotchas and learnings discovered during debugging
+- Understandings of how a certain part of the code base works
 - Future work / TODOs
 
 ## Writing Good Session Summaries
