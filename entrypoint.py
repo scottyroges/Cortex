@@ -22,6 +22,7 @@ def main():
         from logging_config import get_logger, setup_logging
         from src.http import run_server
         from src.autocapture import start_processor
+        from src.ingest.async_processor import start_worker as start_ingestion_worker
 
         # Initialize logging (must be called before get_logger)
         setup_logging()
@@ -53,6 +54,10 @@ def main():
         # Start the queue processor for async auto-capture
         start_processor()
         logger.info("Queue processor started")
+
+        # Start the async ingestion worker
+        start_ingestion_worker()
+        logger.info("Ingestion worker started")
 
         port = int(os.environ.get("CORTEX_HTTP_PORT", "8080"))
         run_server(host="0.0.0.0", port=port)

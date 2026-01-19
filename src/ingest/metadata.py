@@ -352,6 +352,7 @@ def build_dependencies(
     collection: chromadb.Collection,
     repo_id: str,
     branch: str,
+    root_path: Optional[Path] = None,
 ) -> int:
     """
     Build and store dependency documents from ingestion results.
@@ -363,6 +364,7 @@ def build_dependencies(
         collection: ChromaDB collection
         repo_id: Repository identifier
         branch: Git branch name
+        root_path: Project root path for resolving absolute imports
 
     Returns:
         Number of dependency documents created
@@ -386,7 +388,7 @@ def build_dependencies(
                 continue
 
             # Try to resolve internal import to file path
-            resolved = _resolve_import(imp.module, file_path, all_files)
+            resolved = _resolve_import(imp.module, file_path, all_files, root_path)
             if resolved:
                 imports_map[file_path].append(resolved)
 
@@ -553,7 +555,9 @@ def link_test_files(
     return updated
 
 
-def _resolve_import(module: str, from_file: str, all_files: set[str]) -> Optional[str]:
+def _resolve_import(
+    module: str, from_file: str, all_files: set[str], root_path: Optional[Path] = None
+) -> Optional[str]:
     """
     Try to resolve an import module to a file path.
 
@@ -561,6 +565,7 @@ def _resolve_import(module: str, from_file: str, all_files: set[str]) -> Optiona
         module: Import module string (e.g., ".models", "src.utils")
         from_file: Path of the importing file
         all_files: Set of all known file paths
+        root_path: Project root path for resolving absolute imports
 
     Returns:
         Resolved file path or None
@@ -596,12 +601,24 @@ def _resolve_import(module: str, from_file: str, all_files: set[str]) -> Optiona
     # Handle absolute imports (src.module style)
     else:
         module_path = module.replace(".", "/")
-        candidates = [
+
+        # Build candidates with root path if available
+        if root_path:
+            candidates = [
+                root_path / f"{module_path}.py",
+                root_path / module_path / "__init__.py",
+            ]
+            for candidate in candidates:
+                candidate_str = str(candidate)
+                if candidate_str in all_files:
+                    return candidate_str
+
+        # Fallback: try relative paths (for backwards compatibility)
+        relative_candidates = [
             f"{module_path}.py",
             f"{module_path}/__init__.py",
         ]
-
-        for candidate in candidates:
+        for candidate in relative_candidates:
             if candidate in all_files:
                 return candidate
 

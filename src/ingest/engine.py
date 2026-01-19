@@ -253,11 +253,13 @@ class MetadataFileProcessor:
         collection: chromadb.Collection,
         repo_id: str,
         branch: str,
+        root_path: Path,
         llm_provider: Optional[LLMProvider] = None,
     ):
         self.collection = collection
         self.repo_id = repo_id
         self.branch = branch
+        self.root_path = root_path
         self.llm_provider = llm_provider
 
     def _cleanup_old_code_chunks(self, file_paths: list[Path]) -> int:
@@ -344,7 +346,7 @@ class MetadataFileProcessor:
         # Build dependency graph after all files processed
         if results:
             dep_count = build_dependencies(
-                results, self.collection, self.repo_id, self.branch
+                results, self.collection, self.repo_id, self.branch, self.root_path
             )
             docs_created += dep_count
 
@@ -439,7 +441,7 @@ def ingest_codebase(
     file_hashes = state.get("file_hashes", {})
 
     processor = MetadataFileProcessor(
-        collection, repo_id, branch, llm_provider_instance
+        collection, repo_id, branch, root, llm_provider_instance
     )
 
     processed, skipped, docs_created, errors = processor.process_files(
