@@ -328,13 +328,16 @@ DEFAULT_CONFIG = {
     "llm_provider": "none",  # Set dynamically via get_llm_provider()
     "recency_boost": True,
     "recency_half_life_days": 30.0,
-    # Type-based scoring (prioritize understanding over code)
+    # Type-based scoring (prioritize understanding over navigation)
     "type_boost": True,
     "type_multipliers": {
         "insight": 2.0,
         "note": 1.5,
         "commit": 1.5,
-        "code": 1.0,
+        "entry_point": 1.4,
+        "file_metadata": 1.3,
+        "data_contract": 1.3,
+        "dependency": 1.0,
         "skeleton": 1.0,
         "tech_stack": 1.2,
         "initiative": 1.0,

@@ -6,7 +6,7 @@ Provides RAG capabilities with ChromaDB, FlashRank reranking, and AST-aware chun
 
 Environment variables:
     CORTEX_DEBUG: Enable debug logging (default: false)
-    CORTEX_LOG_FILE: Log file path (default: $CORTEX_DATA_PATH/cortex.log)
+    CORTEX_LOG_FILE: Log file path (default: $CORTEX_DATA_PATH/daemon.log)
     CORTEX_HTTP: Enable HTTP server for debugging (default: false)
 """
 
@@ -19,12 +19,16 @@ from mcp.server.fastmcp import FastMCP
 from logging_config import get_logger, setup_logging
 from src.tools import (
     commit_to_cortex,
+    complete_initiative,
     configure_cortex,
+    create_initiative,
+    focus_initiative,
     get_cortex_version,
     get_repo_context,
     get_skeleton,
     ingest_code_into_cortex,
     insight_to_cortex,
+    list_initiatives,
     orient_session,
     recall_recent_work,
     save_note_to_cortex,
@@ -32,6 +36,7 @@ from src.tools import (
     set_initiative,
     set_repo_context,
     summarize_initiative,
+    validate_insight,
 )
 
 # Initialize logging
@@ -57,11 +62,18 @@ mcp.tool()(ingest_code_into_cortex)
 mcp.tool()(save_note_to_cortex)
 mcp.tool()(commit_to_cortex)
 mcp.tool()(insight_to_cortex)
+mcp.tool()(validate_insight)
 
 # Context
 mcp.tool()(set_repo_context)
 mcp.tool()(set_initiative)
 mcp.tool()(get_repo_context)
+
+# Initiatives
+mcp.tool()(create_initiative)
+mcp.tool()(list_initiatives)
+mcp.tool()(focus_initiative)
+mcp.tool()(complete_initiative)
 
 # Recall (Session Memory)
 mcp.tool()(recall_recent_work)

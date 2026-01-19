@@ -262,7 +262,6 @@ def utility_function_{module_idx}_{file_idx}(data: Optional[str] = None) -> str:
             root_path=str(codebase_small),
             collection=collection,
             repo_id="throughput-test",
-            llm_provider="none",
             state_file=state_file,
         )
         elapsed = time.perf_counter() - start
@@ -288,14 +287,13 @@ def utility_function_{module_idx}_{file_idx}(data: Optional[str] = None) -> str:
             root_path=str(codebase_medium),
             collection=collection,
             repo_id="throughput-medium",
-            llm_provider="none",
             state_file=state_file,
         )
         elapsed = time.perf_counter() - start
 
         assert elapsed < 30, f"Medium codebase took {elapsed:.1f}s (>30s)"
         assert stats["files_processed"] == 100
-        assert stats["chunks_created"] >= 100  # At least one chunk per file
+        assert stats["docs_created"] >= 100  # At least one chunk per file
 
 
 class TestLargeCodebase:
@@ -381,7 +379,6 @@ def validate_{i}(value: Optional[str]) -> bool:
             root_path=str(codebase_large),
             collection=collection,
             repo_id="large-test",
-            llm_provider="none",
             state_file=state_file,
         )
         elapsed = time.perf_counter() - start
@@ -407,7 +404,6 @@ def validate_{i}(value: Optional[str]) -> bool:
             root_path=str(codebase_large),
             collection=collection,
             repo_id="large-search-test",
-            llm_provider="none",
             state_file=state_file,
         )
 
@@ -458,7 +454,6 @@ class TestMemoryEfficiency:
             root_path=str(temp_dir),
             collection=collection,
             repo_id="memory-test",
-            llm_provider="none",
             state_file=state_file,
         )
 
@@ -476,8 +471,7 @@ class TestMemoryEfficiency:
                 root_path=str(temp_dir),
                 collection=collection,
                 repo_id="memory-test",
-                llm_provider="none",
-                state_file=state_file,
+                    state_file=state_file,
             )
 
             # Verify incremental behavior (only new files processed)

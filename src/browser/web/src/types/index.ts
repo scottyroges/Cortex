@@ -49,11 +49,11 @@ export interface SearchResponse {
   result_count: number
 }
 
-export type DocType = 'note' | 'insight' | 'commit' | 'initiative' | 'code'
+export type DocType = 'note' | 'insight' | 'commit' | 'initiative'
 
 export function getDocType(metadata: Record<string, unknown>): DocType {
   const type = metadata.type as string
-  if (['note', 'insight', 'commit', 'initiative', 'code'].includes(type)) {
+  if (['note', 'insight', 'commit', 'initiative'].includes(type)) {
     return type as DocType
   }
   return 'note'

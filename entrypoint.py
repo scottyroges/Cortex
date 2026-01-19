@@ -19,10 +19,12 @@ def main():
     if mode == "daemon":
         # Run HTTP server as daemon
         import os
-        from logging_config import get_logger
+        from logging_config import get_logger, setup_logging
         from src.http import run_server
         from src.autocapture import start_processor
 
+        # Initialize logging (must be called before get_logger)
+        setup_logging()
         logger = get_logger("entrypoint")
 
         # Check and run migrations before starting server

@@ -13,11 +13,10 @@ from pathlib import Path
 
 from logging_config import get_logger
 from src.git import get_current_branch, get_head_commit
-from src.ingest import ingest_files
 from src.ingest.walker import compute_file_hash
 from src.security import scrub_secrets
 from src.tools.initiative_utils import find_initiative, resolve_initiative
-from src.tools.services import CONFIG, get_anthropic, get_collection, get_repo_path, get_searcher
+from src.tools.services import CONFIG, get_collection, get_repo_path, get_searcher
 
 logger = get_logger("tools.notes")
 
@@ -140,10 +139,13 @@ def commit_to_cortex(
     initiative: Optional[str] = None,
 ) -> str:
     """
-    Save a session summary and re-index changed files.
+    Save a session summary to Cortex memory.
 
-    Use this at the end of a coding session to capture decisions
-    and ensure changed code is indexed.
+    Use this at the end of a coding session to capture decisions,
+    context, and understanding that would otherwise be lost.
+
+    Note: Changed files are recorded but not re-indexed. Use ingest_code_into_cortex
+    to update the codebase index when files have significantly changed.
 
     Args:
         summary: Summary of the session/changes made
@@ -152,7 +154,7 @@ def commit_to_cortex(
         initiative: Initiative ID/name to tag (uses focused initiative if not specified)
 
     Returns:
-        JSON with commit status, re-indexing stats, and initiative info
+        JSON with commit status and initiative info
     """
     repo = repository or "global"
 
@@ -160,9 +162,8 @@ def commit_to_cortex(
 
     try:
         collection = get_collection()
-        anthropic = get_anthropic() if CONFIG["llm_provider"] == "anthropic" else None
 
-        # Save the summary as a note
+        # Save the summary as a commit
         note_id = f"commit:{uuid.uuid4().hex[:8]}"
 
         repo_path = get_repo_path()
@@ -207,16 +208,6 @@ def commit_to_cortex(
         )
         logger.debug(f"Saved commit summary: {note_id}")
 
-        # Re-index the changed files
-        reindex_stats = ingest_files(
-            file_paths=changed_files,
-            collection=collection,
-            repo_id=repo,
-            anthropic_client=anthropic,
-            llm_provider=CONFIG["llm_provider"],
-        )
-        logger.debug(f"Re-indexed files: {reindex_stats}")
-
         # Rebuild search index
         get_searcher().build_index()
 
@@ -227,7 +218,7 @@ def commit_to_cortex(
             "status": "success",
             "commit_id": note_id,
             "summary_saved": True,
-            "reindex_stats": reindex_stats,
+            "files_recorded": len(changed_files),
         }
 
         # Add initiative info

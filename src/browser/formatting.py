@@ -200,15 +200,13 @@ def format_metadata(meta: dict[str, Any], doc_type: str) -> dict[str, str]:
         if meta.get("completed_at"):
             formatted["Completed"] = format_timestamp(meta["completed_at"])
 
-    elif doc_type == "code":
+    elif doc_type in ("file_metadata", "data_contract", "entry_point", "dependency"):
         if meta.get("file_path"):
             formatted["File"] = meta["file_path"]
         if meta.get("language"):
             formatted["Language"] = meta["language"]
-        if meta.get("function_name"):
-            formatted["Function"] = meta["function_name"]
-        if meta.get("class_name"):
-            formatted["Class"] = meta["class_name"]
+        if meta.get("description"):
+            formatted["Description"] = truncate(meta["description"], 200)
 
     return formatted
 

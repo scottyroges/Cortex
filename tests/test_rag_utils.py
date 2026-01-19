@@ -5,10 +5,8 @@ Tests for search and utility modules
 from pathlib import Path
 
 import pytest
-from langchain_text_splitters import Language
 
 from src.git import get_current_branch, get_git_info
-from src.ingest import detect_language
 from src.search import (
     BM25Index,
     HybridSearcher,
@@ -108,53 +106,6 @@ class TestGitDetection:
         """Test get_current_branch in a non-git directory."""
         branch = get_current_branch(str(temp_dir))
         assert branch == "unknown"
-
-
-class TestLanguageDetection:
-    """Tests for programming language detection."""
-
-    def test_python_detection(self):
-        """Test Python file detection."""
-        assert detect_language("main.py") == Language.PYTHON
-        assert detect_language("script.py") == Language.PYTHON
-
-    def test_javascript_detection(self):
-        """Test JavaScript file detection."""
-        assert detect_language("app.js") == Language.JS
-        assert detect_language("component.jsx") == Language.JS
-
-    def test_typescript_detection(self):
-        """Test TypeScript file detection."""
-        assert detect_language("app.ts") == Language.TS
-        assert detect_language("component.tsx") == Language.TS
-
-    def test_go_detection(self):
-        """Test Go file detection."""
-        assert detect_language("main.go") == Language.GO
-
-    def test_rust_detection(self):
-        """Test Rust file detection."""
-        assert detect_language("lib.rs") == Language.RUST
-
-    def test_markdown_detection(self):
-        """Test Markdown file detection."""
-        assert detect_language("README.md") == Language.MARKDOWN
-        assert detect_language("docs.markdown") == Language.MARKDOWN
-
-    def test_unknown_extension(self):
-        """Test unknown extension returns None."""
-        assert detect_language("file.xyz") is None
-        assert detect_language("file.unknown") is None
-
-    def test_shebang_detection_python(self):
-        """Test Python shebang detection."""
-        content = "#!/usr/bin/env python3\nprint('hello')"
-        assert detect_language("script", content) == Language.PYTHON
-
-    def test_shebang_detection_node(self):
-        """Test Node shebang detection."""
-        content = "#!/usr/bin/env node\nconsole.log('hello')"
-        assert detect_language("script", content) == Language.JS
 
 
 class TestChromaDB:
@@ -377,20 +328,20 @@ class TestRecencyBoost:
         assert new_result["boosted_score"] > old_result["boosted_score"]
         assert new_result["recency_boost"] > old_result["recency_boost"]
 
-    def test_code_not_boosted(self):
-        """Test that code chunks are not affected by recency boost."""
+    def test_file_metadata_not_boosted(self):
+        """Test that file_metadata is not affected by recency boost."""
         from datetime import datetime, timezone, timedelta
 
         now = datetime.now(timezone.utc)
         old_time = (now - timedelta(days=60)).isoformat()
 
         results = [
-            {"rerank_score": 0.8, "meta": {"type": "code", "indexed_at": old_time}},
+            {"rerank_score": 0.8, "meta": {"type": "file_metadata", "indexed_at": old_time}},
         ]
 
         boosted = apply_recency_boost(results)
 
-        # Code should not be boosted - recency_boost should be 1.0
+        # file_metadata should not be boosted - recency_boost should be 1.0
         assert boosted[0]["recency_boost"] == 1.0
         assert boosted[0]["boosted_score"] == 0.8
 

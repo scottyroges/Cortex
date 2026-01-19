@@ -10,7 +10,6 @@ const typeColors: Record<string, string> = {
   insight: 'bg-type-insight',
   commit: 'bg-type-commit',
   initiative: 'bg-type-initiative',
-  code: 'bg-type-code',
 }
 
 const typeLabels: Record<string, string> = {
@@ -18,7 +17,6 @@ const typeLabels: Record<string, string> = {
   insight: 'Insight',
   commit: 'Commit',
   initiative: 'Initiative',
-  code: 'Code',
 }
 </script>
 

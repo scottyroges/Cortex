@@ -100,12 +100,11 @@ class TestIngestCodeIntoCortex:
             root_path=str(temp_dir),
             collection=collection,
             repo_id="testproject",
-            llm_provider="none",
             state_file=state_file,
         )
 
         assert stats["files_processed"] == 2
-        assert stats["chunks_created"] >= 2
+        assert stats["docs_created"] >= 2
 
         # Verify content in collection
         results = collection.get(include=["metadatas"])
@@ -131,7 +130,6 @@ class TestIngestCodeIntoCortex:
         stats1 = ingest_codebase(
             root_path=str(temp_dir),
             collection=collection,
-            llm_provider="none",
             state_file=state_file,
         )
         assert stats1["files_processed"] == 1
@@ -140,7 +138,6 @@ class TestIngestCodeIntoCortex:
         stats2 = ingest_codebase(
             root_path=str(temp_dir),
             collection=collection,
-            llm_provider="none",
             state_file=state_file,
         )
         assert stats2["files_processed"] == 0
@@ -149,7 +146,6 @@ class TestIngestCodeIntoCortex:
         stats3 = ingest_codebase(
             root_path=str(temp_dir),
             collection=collection,
-            llm_provider="none",
             state_file=state_file,
             force_full=True,
         )
@@ -551,7 +547,7 @@ class TestContextTools:
             documents=["def calculate_total(): return sum(items)"],
             ids=["code:1"],
             metadatas=[{
-                "type": "code",
+                "type": "file_metadata",
                 "file_path": "/app/utils.py",
                 "repository": repository,
                 "branch": "main",
@@ -784,32 +780,34 @@ def validate_input(value):
             root_path=str(temp_dir),
             collection=collection,
             repo_id="testcalc",
-            llm_provider="none",
             state_file=state_file,
         )
 
         assert stats["files_processed"] == 2
-        assert stats["chunks_created"] >= 2
+        assert stats["docs_created"] >= 2
 
-        # Search
+        # Search - with metadata-first, we search for file metadata, not raw code
         searcher = HybridSearcher(collection)
         searcher.build_index()
 
-        candidates = searcher.search("add two numbers", top_k=10)
+        candidates = searcher.search("calculator arithmetic", top_k=10)
         assert len(candidates) > 0
 
         # Rerank
         reranker = RerankerService()
-        reranked = reranker.rerank("add two numbers", candidates, top_k=3)
+        reranked = reranker.rerank("calculator arithmetic", candidates, top_k=3)
 
-        # The calculator add function should be in results
-        found_add = False
+        # Should find calculator-related content (file path, description, or exports)
+        found_calc = False
         for result in reranked:
-            if "add" in result.get("text", "").lower():
-                found_add = True
+            text = result.get("text", "").lower()
+            meta = result.get("meta", {})
+            file_path = meta.get("file_path", "").lower()
+            if "calculator" in text or "calculator" in file_path or "arithmetic" in text:
+                found_calc = True
                 break
 
-        assert found_add, "Should find the add function in search results"
+        assert found_calc, "Should find calculator-related metadata in search results"
 
     def test_note_searchable(self, temp_chroma_client):
         """Test that saved notes are searchable."""
@@ -1009,9 +1007,9 @@ class TestBranchAwareSearch:
             ],
             ids=["code-feature-1", "code-main-1", "code-main-2"],
             metadatas=[
-                {"type": "code", "file_path": "/src/order.js", "repository": "test", "branch": "feature-x", "language": "javascript"},
-                {"type": "code", "file_path": "/src/order.js", "repository": "test", "branch": "main", "language": "javascript"},
-                {"type": "code", "file_path": "/src/utils.js", "repository": "test", "branch": "main", "language": "javascript"},
+                {"type": "file_metadata", "file_path": "/src/order.js", "repository": "test", "branch": "feature-x", "language": "javascript"},
+                {"type": "file_metadata", "file_path": "/src/order.js", "repository": "test", "branch": "main", "language": "javascript"},
+                {"type": "file_metadata", "file_path": "/src/utils.js", "repository": "test", "branch": "main", "language": "javascript"},
             ],
         )
 
@@ -1101,7 +1099,7 @@ class TestBranchAwareSearch:
             ],
             ids=["code-feature-only"],
             metadatas=[
-                {"type": "code", "file_path": "/src/feature.js", "repository": "test", "branch": "feature-x", "language": "javascript"},
+                {"type": "file_metadata", "file_path": "/src/feature.js", "repository": "test", "branch": "feature-x", "language": "javascript"},
             ],
         )
 
@@ -1114,7 +1112,7 @@ class TestBranchAwareSearch:
 
         # Should NOT find the feature-x code
         for r in results:
-            if r["meta"]["type"] == "code":
+            if r["meta"]["type"] == "file_metadata":
                 assert r["meta"]["branch"] != "feature-x"
 
     def test_main_branch_included_from_feature_branch(self, temp_chroma_client):
@@ -1132,7 +1130,7 @@ class TestBranchAwareSearch:
             ],
             ids=["code-main-core"],
             metadatas=[
-                {"type": "code", "file_path": "/src/core.js", "repository": "test", "branch": "main", "language": "javascript"},
+                {"type": "file_metadata", "file_path": "/src/core.js", "repository": "test", "branch": "main", "language": "javascript"},
             ],
         )
 
@@ -1169,7 +1167,7 @@ class TestTypeFilter:
             ids=["note-1", "code-1", "commit-1"],
             metadatas=[
                 {"type": "note", "repository": "test", "branch": "main", "title": "Architecture", "tags": ""},
-                {"type": "code", "repository": "test", "branch": "main", "file_path": "/src/order.py", "language": "python"},
+                {"type": "file_metadata", "repository": "test", "branch": "main", "file_path": "/src/order.py", "language": "python"},
                 {"type": "commit", "repository": "test", "branch": "main", "files": "[]"},
             ],
         )
@@ -1205,7 +1203,7 @@ class TestTypeFilter:
             metadatas=[
                 {"type": "note", "repository": "test", "branch": "main", "title": "Caching", "tags": ""},
                 {"type": "insight", "repository": "test", "branch": "main", "file_path": "/src/auth.py"},
-                {"type": "code", "repository": "test", "branch": "main", "file_path": "/src/auth.py", "language": "python"},
+                {"type": "file_metadata", "repository": "test", "branch": "main", "file_path": "/src/auth.py", "language": "python"},
                 {"type": "commit", "repository": "test", "branch": "main", "files": "[]"},
             ],
         )
@@ -1238,14 +1236,14 @@ class TestTypeFilter:
             ],
             ids=["code-feature", "code-main", "note-1"],
             metadatas=[
-                {"type": "code", "repository": "test", "branch": "feature-x", "file_path": "/src/app.py", "language": "python"},
-                {"type": "code", "repository": "test", "branch": "main", "file_path": "/src/app.py", "language": "python"},
+                {"type": "file_metadata", "repository": "test", "branch": "feature-x", "file_path": "/src/app.py", "language": "python"},
+                {"type": "file_metadata", "repository": "test", "branch": "main", "file_path": "/src/app.py", "language": "python"},
                 {"type": "note", "repository": "test", "branch": "main", "title": "Functions", "tags": ""},
             ],
         )
 
         # Search for code only, from main branch (should exclude feature-x code)
-        where_filter = build_branch_aware_filter(repository="test", branches=["main"], types=["code"])
+        where_filter = build_branch_aware_filter(repository="test", branches=["main"], types=["file_metadata"])
         searcher = HybridSearcher(collection)
         searcher.build_index(where_filter)
 
@@ -1253,7 +1251,7 @@ class TestTypeFilter:
 
         # Should only return main branch code
         for r in results:
-            assert r["meta"]["type"] == "code"
+            assert r["meta"]["type"] == "file_metadata"
             assert r["meta"]["branch"] == "main", f"Expected main branch, got {r['meta']['branch']}"
 
     def test_filter_mixed_branch_and_non_branch_types(self, temp_chroma_client):
@@ -1274,15 +1272,15 @@ class TestTypeFilter:
             ],
             ids=["code-feature", "code-main", "note-1", "commit-1"],
             metadatas=[
-                {"type": "code", "repository": "test", "branch": "feature-x", "file_path": "/src/app.py", "language": "python"},
-                {"type": "code", "repository": "test", "branch": "main", "file_path": "/src/app.py", "language": "python"},
+                {"type": "file_metadata", "repository": "test", "branch": "feature-x", "file_path": "/src/app.py", "language": "python"},
+                {"type": "file_metadata", "repository": "test", "branch": "main", "file_path": "/src/app.py", "language": "python"},
                 {"type": "note", "repository": "test", "branch": "main", "title": "Code Note", "tags": ""},
                 {"type": "commit", "repository": "test", "branch": "main", "files": "[]"},
             ],
         )
 
         # Search for code + note from main branch
-        where_filter = build_branch_aware_filter(repository="test", branches=["main"], types=["code", "note"])
+        where_filter = build_branch_aware_filter(repository="test", branches=["main"], types=["file_metadata", "note"])
         searcher = HybridSearcher(collection)
         searcher.build_index(where_filter)
 
@@ -1293,8 +1291,8 @@ class TestTypeFilter:
         assert "code" in types_found or "note" in types_found
 
         for r in results:
-            assert r["meta"]["type"] in ("code", "note")
-            if r["meta"]["type"] == "code":
+            assert r["meta"]["type"] in ("file_metadata", "note")
+            if r["meta"]["type"] == "file_metadata":
                 assert r["meta"]["branch"] == "main"
 
     def test_filter_empty_types_no_filter(self, temp_chroma_client):
@@ -1313,7 +1311,7 @@ class TestTypeFilter:
             ids=["note-1", "code-1"],
             metadatas=[
                 {"type": "note", "repository": "test", "branch": "main", "title": "", "tags": ""},
-                {"type": "code", "repository": "test", "branch": "main", "file_path": "/app.py", "language": "python"},
+                {"type": "file_metadata", "repository": "test", "branch": "main", "file_path": "/app.py", "language": "python"},
             ],
         )
 
@@ -1397,7 +1395,7 @@ class TestTypeFilter:
         result = build_branch_aware_filter(
             repository="test",
             branches=["feature", "main"],
-            types=["code", "skeleton"]
+            types=["file_metadata", "skeleton"]
         )
 
         assert "$and" in result
@@ -1423,5 +1421,5 @@ class TestTypeFilter:
 
         assert type_clause is not None
         assert branch_clause is not None
-        assert set(type_clause["type"]["$in"]) == {"code", "skeleton"}
+        assert set(type_clause["type"]["$in"]) == {"file_metadata", "skeleton"}
         assert set(branch_clause["branch"]["$in"]) == {"feature", "main"}

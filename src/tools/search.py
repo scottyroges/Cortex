@@ -79,8 +79,8 @@ def _filter_by_initiative(results: list, initiative_id: str, include_completed: 
         # Include if matches initiative
         if result_init_id == initiative_id:
             filtered.append(result)
-        # Include code that's not tagged with any initiative (belongs to whole repo)
-        elif meta.get("type") == "code" and not result_init_id:
+        # Include metadata types that aren't tagged (belong to whole repo)
+        elif meta.get("type") in ("file_metadata", "data_contract", "entry_point", "dependency", "skeleton") and not result_init_id:
             filtered.append(result)
 
     return filtered
@@ -139,7 +139,7 @@ def build_branch_aware_filter(
         # No branch filtering if unknown
         return {"repository": repository} if repository else None
 
-    # Types filtered by branch: code, skeleton, file_metadata, data_contract, entry_point, dependency
+    # Types filtered by branch: skeleton, file_metadata, data_contract, entry_point, dependency
     # Types NOT filtered: note, commit, tech_stack, initiative, insight
     branch_filter = {
         "$or": [
@@ -161,8 +161,6 @@ def build_branch_aware_filter(
 
 # Valid document types for filtering
 VALID_TYPES = {
-    # Legacy
-    "code",
     # Metadata-first types
     "file_metadata",
     "data_contract",
@@ -178,8 +176,8 @@ VALID_TYPES = {
     "initiative",
 }
 
-# Types that require branch filtering
-BRANCH_FILTERED_TYPES = {"code", "skeleton", "file_metadata", "data_contract", "entry_point", "dependency"}
+# Types that require branch filtering (code-related metadata)
+BRANCH_FILTERED_TYPES = {"skeleton", "file_metadata", "data_contract", "entry_point", "dependency"}
 
 # Search presets for common query patterns
 SEARCH_PRESETS = {
@@ -597,11 +595,11 @@ def search_cortex(
         repository: Repository identifier for filtering
         min_score: Minimum relevance score threshold (0-1, overrides config)
         branch: Optional branch filter. Defaults to auto-detect from cwd.
-                Code/skeleton are filtered by branch; notes/commits are not.
+                Metadata types are filtered by branch; notes/commits are not.
         initiative: Optional initiative ID or name to filter results
         include_completed: Include content from completed initiatives (default: True)
         types: Optional list of document types to include. Valid types:
-               code, skeleton, note, commit, insight, tech_stack, initiative,
+               skeleton, note, commit, insight, tech_stack, initiative,
                file_metadata, data_contract, entry_point, dependency.
                Example: ["note", "insight"] for understanding-only search.
         preset: Optional search preset. Overrides types if provided.

@@ -8,18 +8,14 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-from langchain_text_splitters import Language
 
 from src.config import DEFAULT_IGNORE_PATTERNS
 from src.git import get_git_changed_files, get_head_commit, get_untracked_files, is_git_repo
 from src.ingest import (
-    chunk_code_file,
     compute_file_hash,
-    extract_scope_from_chunk,
     generate_tree_structure,
     get_changed_files,
     ingest_codebase,
-    ingest_file,
     store_skeleton,
     walk_codebase,
 )
@@ -175,235 +171,11 @@ class TestDeltaSync:
         assert loaded == {}
 
 
-class TestChunking:
-    """Tests for code chunking."""
-
-    def test_chunk_python(self, sample_python_file: Path):
-        """Test chunking Python code."""
-        content = sample_python_file.read_text()
-        chunks = chunk_code_file(content, Language.PYTHON)
-
-        assert len(chunks) >= 1
-        assert all(isinstance(c, str) for c in chunks)
-        assert all(len(c) <= 1500 for c in chunks)  # Respects chunk_size
-
-    def test_chunk_javascript(self, sample_js_file: Path):
-        """Test chunking JavaScript code."""
-        content = sample_js_file.read_text()
-        chunks = chunk_code_file(content, Language.JS)
-
-        assert len(chunks) >= 1
-        assert all(isinstance(c, str) for c in chunks)
-
-    def test_chunk_unknown_language(self, temp_dir: Path):
-        """Test chunking unknown language falls back to generic."""
-        file_path = temp_dir / "data.xyz"
-        content = "line 1\nline 2\nline 3\n" * 100
-        file_path.write_text(content)
-
-        chunks = chunk_code_file(content, None)
-        assert len(chunks) >= 1
-
-    def test_chunk_respects_size(self, temp_dir: Path):
-        """Test that chunks respect size limits."""
-        # Create a large file
-        content = "x" * 5000
-        chunks = chunk_code_file(content, None, chunk_size=1000, chunk_overlap=100)
-
-        assert len(chunks) > 1
-        assert all(len(c) <= 1000 for c in chunks)
-
-
-class TestScopeExtraction:
-    """Tests for function/class scope extraction from code chunks."""
-
-    def test_extract_python_function(self):
-        """Test extracting Python function name."""
-        chunk = '''def calculate_total(items):
-    """Calculate total price."""
-    return sum(item.price for item in items)
-'''
-        result = extract_scope_from_chunk(chunk, Language.PYTHON)
-        assert result["function_name"] == "calculate_total"
-        assert result["class_name"] is None
-        assert result["scope"] == "calculate_total"
-
-    def test_extract_python_class(self):
-        """Test extracting Python class name."""
-        chunk = '''class OrderService:
-    """Service for managing orders."""
-
-    def __init__(self, db):
-        self.db = db
-'''
-        result = extract_scope_from_chunk(chunk, Language.PYTHON)
-        assert result["class_name"] == "OrderService"
-        assert result["function_name"] == "__init__"
-        assert result["scope"] == "OrderService.__init__"
-
-    def test_extract_python_async_function(self):
-        """Test extracting async Python function."""
-        chunk = '''async def fetch_data(url):
-    async with aiohttp.ClientSession() as session:
-        return await session.get(url)
-'''
-        result = extract_scope_from_chunk(chunk, Language.PYTHON)
-        assert result["function_name"] == "fetch_data"
-        assert result["scope"] == "fetch_data"
-
-    def test_extract_javascript_function(self):
-        """Test extracting JavaScript function name."""
-        chunk = '''function validateInput(data) {
-    if (!data.name) {
-        throw new Error('Name required');
-    }
-}
-'''
-        result = extract_scope_from_chunk(chunk, Language.JS)
-        assert result["function_name"] == "validateInput"
-        assert result["scope"] == "validateInput"
-
-    def test_extract_javascript_class(self):
-        """Test extracting JavaScript class name."""
-        chunk = '''class UserController {
-    constructor(service) {
-        this.service = service;
-    }
-}
-'''
-        result = extract_scope_from_chunk(chunk, Language.JS)
-        assert result["class_name"] == "UserController"
-        assert "class_name" in result
-
-    def test_extract_go_function(self):
-        """Test extracting Go function name."""
-        chunk = '''func ProcessOrder(ctx context.Context, order *Order) error {
-    if err := validate(order); err != nil {
-        return err
-    }
-    return nil
-}
-'''
-        result = extract_scope_from_chunk(chunk, Language.GO)
-        assert result["function_name"] == "ProcessOrder"
-        assert result["scope"] == "ProcessOrder"
-
-    def test_extract_go_method(self):
-        """Test extracting Go method with receiver."""
-        chunk = '''func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
-    // Handle the request
-}
-'''
-        result = extract_scope_from_chunk(chunk, Language.GO)
-        assert result["function_name"] == "handleRequest"
-
-    def test_extract_rust_function(self):
-        """Test extracting Rust function name."""
-        chunk = '''pub async fn connect_database(config: &Config) -> Result<Pool, Error> {
-    Pool::connect(&config.database_url).await
-}
-'''
-        result = extract_scope_from_chunk(chunk, Language.RUST)
-        assert result["function_name"] == "connect_database"
-
-    def test_extract_no_scope_from_plain_text(self):
-        """Test that plain text returns no scope."""
-        chunk = "This is just a comment or documentation text."
-        result = extract_scope_from_chunk(chunk, Language.PYTHON)
-        assert result["function_name"] is None
-        assert result["class_name"] is None
-        assert result["scope"] is None
-
-    def test_extract_none_language(self):
-        """Test that None language returns empty result."""
-        chunk = "def foo(): pass"
-        result = extract_scope_from_chunk(chunk, None)
-        assert result["function_name"] is None
-        assert result["class_name"] is None
-        assert result["scope"] is None
-
-    def test_extract_innermost_function(self):
-        """Test that the innermost function is extracted."""
-        chunk = '''def outer():
-    def inner():
-        return "inner"
-    return inner()
-'''
-        result = extract_scope_from_chunk(chunk, Language.PYTHON)
-        # Should get the innermost (last) function
-        assert result["function_name"] == "inner"
-
-
 class TestIngestion:
-    """Tests for file ingestion."""
-
-    def test_ingest_single_file(self, sample_python_file: Path, temp_chroma_client):
-        """Test ingesting a single file."""
-        from src.storage import get_or_create_collection
-
-        collection = get_or_create_collection(temp_chroma_client, "test_ingest")
-
-        doc_ids = ingest_file(
-            file_path=sample_python_file,
-            collection=collection,
-            repo_id="test",
-            branch="main",
-            llm_provider="none",  # Skip LLM headers for testing
-        )
-
-        assert len(doc_ids) >= 1
-        assert all(id.startswith("test:") for id in doc_ids)
-
-        # Verify documents were added
-        results = collection.get(ids=doc_ids)
-        assert len(results["documents"]) == len(doc_ids)
-
-    def test_ingest_file_metadata(self, sample_python_file: Path, temp_chroma_client):
-        """Test that ingestion adds correct metadata."""
-        from src.storage import get_or_create_collection
-
-        collection = get_or_create_collection(temp_chroma_client, "test_meta")
-
-        ingest_file(
-            file_path=sample_python_file,
-            collection=collection,
-            repo_id="myproject",
-            branch="feature",
-            llm_provider="none",
-        )
-
-        results = collection.get(include=["metadatas"])
-
-        for meta in results["metadatas"]:
-            assert meta["repository"] == "myproject"
-            assert meta["branch"] == "feature"
-            assert meta["language"] == "python"
-            assert meta["type"] == "code"
-
-    def test_ingest_scrubs_secrets(self, file_with_secrets: Path, temp_chroma_client):
-        """Test that secrets are scrubbed during ingestion."""
-        from src.storage import get_or_create_collection
-
-        collection = get_or_create_collection(temp_chroma_client, "test_scrub")
-
-        ingest_file(
-            file_path=file_with_secrets,
-            collection=collection,
-            repo_id="test",
-            branch="main",
-            llm_provider="none",
-        )
-
-        results = collection.get(include=["documents"])
-
-        for doc in results["documents"]:
-            # Secrets should be redacted
-            assert "AKIAIOSFODNN7EXAMPLE" not in doc
-            assert "ghp_" not in doc
-            assert "sk_live_" not in doc
+    """Tests for metadata-first file ingestion."""
 
     def test_ingest_codebase(self, temp_dir: Path, temp_chroma_client):
-        """Test full codebase ingestion."""
+        """Test full codebase ingestion with metadata-first approach."""
         from src.storage import get_or_create_collection
 
         # Create test files
@@ -419,13 +191,13 @@ class TestIngestion:
             root_path=str(temp_dir),
             collection=collection,
             repo_id="myproject",
-            llm_provider="none",
             state_file=state_file,
         )
 
         assert stats["files_scanned"] == 2
         assert stats["files_processed"] == 2
-        assert stats["chunks_created"] >= 2
+        # metadata-first creates docs
+        assert stats["docs_created"] >= 2
         assert stats["errors"] == []
 
     def test_ingest_codebase_delta(self, temp_dir: Path, temp_chroma_client):
@@ -446,7 +218,6 @@ class TestIngestion:
         stats1 = ingest_codebase(
             root_path=str(code_dir),
             collection=collection,
-            llm_provider="none",
             state_file=state_file,
         )
         assert stats1["files_processed"] == 1
@@ -455,7 +226,6 @@ class TestIngestion:
         stats2 = ingest_codebase(
             root_path=str(code_dir),
             collection=collection,
-            llm_provider="none",
             state_file=state_file,
         )
         # No files should be processed (unchanged)
@@ -468,7 +238,6 @@ class TestIngestion:
         stats3 = ingest_codebase(
             root_path=str(code_dir),
             collection=collection,
-            llm_provider="none",
             state_file=state_file,
         )
         assert stats3["files_processed"] == 1
@@ -491,7 +260,6 @@ class TestIngestion:
         ingest_codebase(
             root_path=str(code_dir),
             collection=collection,
-            llm_provider="none",
             state_file=state_file,
         )
 
@@ -499,32 +267,12 @@ class TestIngestion:
         stats = ingest_codebase(
             root_path=str(code_dir),
             collection=collection,
-            llm_provider="none",
             state_file=state_file,
             force_full=True,
         )
 
         # Should process all files even though unchanged
         assert stats["files_processed"] == 1
-
-    def test_ingest_empty_file(self, temp_dir: Path, temp_chroma_client):
-        """Test that empty files are skipped."""
-        from src.storage import get_or_create_collection
-
-        (temp_dir / "empty.py").write_text("")
-
-        collection = get_or_create_collection(temp_chroma_client, "test_empty")
-
-        doc_ids = ingest_file(
-            file_path=temp_dir / "empty.py",
-            collection=collection,
-            repo_id="test",
-            branch="main",
-            llm_provider="none",
-        )
-
-        assert doc_ids == []
-
 
 class TestSkeleton:
     """Tests for skeleton index functionality."""
@@ -994,7 +742,6 @@ class TestStateFormat:
         ingest_codebase(
             root_path=str(code_dir),
             collection=collection,
-            llm_provider="none",
             state_file=str(state_file),
         )
 
@@ -1036,7 +783,6 @@ class TestStateFormat:
         stats = ingest_codebase(
             root_path=str(code_dir),
             collection=collection,
-            llm_provider="none",
             state_file=state_file,
         )
 
@@ -1058,7 +804,6 @@ class TestStateFormat:
         stats = ingest_codebase(
             root_path=str(code_dir),
             collection=collection,
-            llm_provider="none",
             state_file=state_file,
         )
 
@@ -1235,7 +980,6 @@ generated.py
             root_path=str(code_dir),
             collection=collection,
             repo_id="test",
-            llm_provider="none",
             state_file=state_file,
             include_patterns=["src/**"],
         )
@@ -1265,3 +1009,286 @@ generated.py
         # docs should not appear since it doesn't match pattern
         assert "docs" not in tree
         assert "readme.md" not in tree
+
+
+class TestMetadataFirstIngestion:
+    """Tests for metadata-first ingestion approach."""
+
+    def test_ingest_metadata_creates_file_metadata(self, temp_dir: Path, temp_chroma_client):
+        """Test that metadata-first ingestion creates file_metadata documents."""
+        from src.storage import get_or_create_collection
+
+        # Create a Python file with a class
+        (temp_dir / "service.py").write_text('''
+"""User service module."""
+from typing import Optional
+
+class UserService:
+    """Service for user operations."""
+
+    def get_user(self, user_id: int) -> Optional[dict]:
+        """Get user by ID."""
+        pass
+
+    def create_user(self, name: str) -> dict:
+        """Create a new user."""
+        pass
+''')
+
+        collection = get_or_create_collection(temp_chroma_client, "test_metadata")
+        state_file = str(temp_dir / "state.json")
+
+        stats = ingest_codebase(
+            root_path=str(temp_dir),
+            collection=collection,
+            repo_id="test",
+            state_file=state_file,
+        )
+
+        assert stats["files_processed"] >= 1
+        assert stats["docs_created"] >= 1
+
+        # Verify file_metadata document was created
+        results = collection.get(
+            where={"type": "file_metadata"},
+            include=["documents", "metadatas"],
+        )
+
+        assert len(results["ids"]) >= 1
+        meta = results["metadatas"][0]
+        assert meta["repository"] == "test"
+        assert meta["language"] == "python"
+        assert "UserService" in meta.get("exports", "")
+
+    def test_ingest_metadata_creates_data_contracts(self, temp_dir: Path, temp_chroma_client):
+        """Test that metadata-first ingestion creates data_contract documents for dataclasses."""
+        from src.storage import get_or_create_collection
+
+        # Create a Python file with a dataclass
+        (temp_dir / "models.py").write_text('''
+from dataclasses import dataclass
+from typing import Optional
+
+@dataclass
+class User:
+    """User data model."""
+    id: int
+    name: str
+    email: Optional[str] = None
+''')
+
+        collection = get_or_create_collection(temp_chroma_client, "test_contracts")
+        state_file = str(temp_dir / "state.json")
+
+        stats = ingest_codebase(
+            root_path=str(temp_dir),
+            collection=collection,
+            repo_id="test",
+            state_file=state_file,
+        )
+
+        # Verify data_contract document was created
+        results = collection.get(
+            where={"type": "data_contract"},
+            include=["documents", "metadatas"],
+        )
+
+        assert len(results["ids"]) >= 1
+        meta = results["metadatas"][0]
+        assert meta["name"] == "User"
+        assert meta["contract_type"] == "dataclass"
+        assert "id" in meta.get("fields", "")
+        assert "name" in meta.get("fields", "")
+
+    def test_ingest_metadata_creates_entry_points(self, temp_dir: Path, temp_chroma_client):
+        """Test that metadata-first ingestion creates entry_point documents."""
+        from src.storage import get_or_create_collection
+
+        # Create a main entry point file
+        (temp_dir / "main.py").write_text('''
+"""Main application entry point."""
+
+def main():
+    """Start the application."""
+    print("Starting...")
+
+if __name__ == "__main__":
+    main()
+''')
+
+        collection = get_or_create_collection(temp_chroma_client, "test_entry")
+        state_file = str(temp_dir / "state.json")
+
+        stats = ingest_codebase(
+            root_path=str(temp_dir),
+            collection=collection,
+            repo_id="test",
+            state_file=state_file,
+        )
+
+        # Verify entry_point document was created
+        results = collection.get(
+            where={"type": "entry_point"},
+            include=["documents", "metadatas"],
+        )
+
+        assert len(results["ids"]) >= 1
+        meta = results["metadatas"][0]
+        assert meta["entry_type"] == "main"
+        assert "main.py" in meta["file_path"]
+
+    def test_ingest_metadata_creates_dependencies(self, temp_dir: Path, temp_chroma_client):
+        """Test that metadata-first ingestion creates dependency documents."""
+        from src.storage import get_or_create_collection
+
+        # Create files with internal imports using relative imports
+        src_dir = temp_dir / "src"
+        src_dir.mkdir()
+
+        (src_dir / "__init__.py").write_text("")
+
+        (src_dir / "models.py").write_text('''
+class User:
+    pass
+''')
+
+        (src_dir / "service.py").write_text('''
+from .models import User
+
+class UserService:
+    def get_user(self) -> User:
+        pass
+''')
+
+        collection = get_or_create_collection(temp_chroma_client, "test_deps")
+        state_file = str(temp_dir / "state.json")
+
+        stats = ingest_codebase(
+            root_path=str(src_dir),
+            collection=collection,
+            repo_id="test",
+            state_file=state_file,
+        )
+
+        # Verify dependency documents were created
+        results = collection.get(
+            where={"type": "dependency"},
+            include=["documents", "metadatas"],
+        )
+
+        # At least one dependency document should exist for the import relationship
+        assert len(results["ids"]) >= 1
+
+    def test_ingest_metadata_no_code_chunks(self, temp_dir: Path, temp_chroma_client):
+        """Test that metadata-first ingestion does NOT create code chunks."""
+        from src.storage import get_or_create_collection
+
+        (temp_dir / "main.py").write_text('''
+def hello():
+    print("Hello world")
+''')
+
+        collection = get_or_create_collection(temp_chroma_client, "test_no_chunks")
+        state_file = str(temp_dir / "state.json")
+
+        ingest_codebase(
+            root_path=str(temp_dir),
+            collection=collection,
+            repo_id="test",
+            state_file=state_file,
+        )
+
+        # Verify NO code chunks were created
+        results = collection.get(
+            where={"type": "code"},
+            include=["metadatas"],
+        )
+
+        assert len(results["ids"]) == 0
+
+    def test_ingest_metadata_unsupported_language_skipped(self, temp_dir: Path, temp_chroma_client):
+        """Test that unsupported languages are gracefully skipped in metadata mode."""
+        from src.storage import get_or_create_collection
+
+        # Create files in supported and unsupported languages
+        (temp_dir / "main.py").write_text("def main(): pass")
+        (temp_dir / "style.css").write_text("body { color: red; }")
+
+        collection = get_or_create_collection(temp_chroma_client, "test_unsupported")
+        state_file = str(temp_dir / "state.json")
+
+        stats = ingest_codebase(
+            root_path=str(temp_dir),
+            collection=collection,
+            repo_id="test",
+            state_file=state_file,
+        )
+
+        # Python file should be processed, CSS skipped
+        assert stats["files_processed"] == 1
+        assert stats["files_skipped"] >= 1
+
+    def test_ingest_metadata_typescript(self, temp_dir: Path, temp_chroma_client):
+        """Test metadata-first ingestion of TypeScript files."""
+        from src.storage import get_or_create_collection
+
+        (temp_dir / "types.ts").write_text('''
+export interface User {
+    id: number;
+    name: string;
+    email?: string;
+}
+
+export type UserRole = "admin" | "user" | "guest";
+''')
+
+        collection = get_or_create_collection(temp_chroma_client, "test_ts")
+        state_file = str(temp_dir / "state.json")
+
+        stats = ingest_codebase(
+            root_path=str(temp_dir),
+            collection=collection,
+            repo_id="test",
+            state_file=state_file,
+        )
+
+        assert stats["files_processed"] == 1
+
+        # Verify data_contract documents for interfaces
+        results = collection.get(
+            where={"type": "data_contract"},
+            include=["metadatas"],
+        )
+
+        contract_names = [m["name"] for m in results["metadatas"]]
+        assert "User" in contract_names
+
+    def test_ingest_metadata_delta_sync(self, temp_dir: Path, temp_chroma_client):
+        """Test that delta sync works with metadata-first ingestion."""
+        from src.storage import get_or_create_collection
+
+        code_dir = temp_dir / "code"
+        code_dir.mkdir()
+        (code_dir / "main.py").write_text("def main(): pass")
+
+        collection = get_or_create_collection(temp_chroma_client, "test_meta_delta")
+        state_file = str(temp_dir / "state.json")
+
+        # First ingestion
+        stats1 = ingest_codebase(
+            root_path=str(code_dir),
+            collection=collection,
+            repo_id="test",
+            state_file=state_file,
+        )
+        assert stats1["files_processed"] == 1
+
+        # Second ingestion without changes
+        stats2 = ingest_codebase(
+            root_path=str(code_dir),
+            collection=collection,
+            repo_id="test",
+            state_file=state_file,
+        )
+        # Should skip unchanged files
+        assert stats2["files_processed"] == 0

@@ -14,7 +14,6 @@ from typing import Any
 # Insights are most valuable (unique understanding tied to code)
 # Notes and commits capture decisions and context
 # Navigation types (file_metadata, entry_point, data_contract) are high value
-# Code is legacy - less valuable than native grep/glob
 DEFAULT_TYPE_MULTIPLIERS = {
     # Understanding (irreplaceable - grep can't find this)
     "insight": 2.0,
@@ -29,8 +28,6 @@ DEFAULT_TYPE_MULTIPLIERS = {
     "tech_stack": 1.2,
     "skeleton": 1.0,
     "initiative": 1.0,
-    # Legacy
-    "code": 1.0,
 }
 
 
@@ -61,7 +58,7 @@ def apply_type_boost(
 
     for result in results:
         meta = result.get("meta", {})
-        doc_type = meta.get("type", "code")  # Default to "code" if unknown
+        doc_type = meta.get("type", "unknown")
 
         # Get the current score (may have recency boost already applied)
         current_score = result.get("boosted_score", result.get("rerank_score", 0))

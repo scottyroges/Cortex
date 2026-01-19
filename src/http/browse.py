@@ -116,7 +116,7 @@ def browse_list(
 
     Args:
         repository: Filter by repository name
-        type: Filter by document type (code, note, commit, insight, initiative)
+        type: Filter by document type (note, commit, insight, initiative, file_metadata, etc.)
         limit: Maximum results
     """
     logger.info(f"Browse list requested: repository={repository}, type={doc_type}")
@@ -363,4 +363,48 @@ def browse_delete(id: str = Query(..., alias="id")) -> dict[str, Any]:
     return {
         "success": True,
         "id": doc_id,
+    }
+
+
+@router.delete("/delete-by-type")
+def browse_delete_by_type(
+    doc_type: str = Query(..., alias="type"),
+    repository: Optional[str] = None,
+) -> dict[str, Any]:
+    """
+    Delete all documents of a specific type.
+
+    Args:
+        type: Document type to delete (e.g., 'code', 'note')
+        repository: Optional repository filter
+    """
+    logger.info(f"Browse delete by type requested: type={doc_type}, repository={repository}")
+    collection = get_collection()
+
+    # Build where filter
+    where_filter: dict[str, Any] = {"type": doc_type}
+    if repository:
+        where_filter = {"$and": [{"type": doc_type}, {"repository": repository}]}
+
+    # Get all matching documents
+    results = collection.get(where=where_filter, include=[])
+
+    if not results["ids"]:
+        return {
+            "success": True,
+            "deleted_count": 0,
+            "message": f"No documents found with type '{doc_type}'",
+        }
+
+    # Delete all matching documents
+    collection.delete(ids=results["ids"])
+
+    # Rebuild search index
+    get_searcher().build_index()
+
+    logger.info(f"Deleted {len(results['ids'])} documents of type '{doc_type}'")
+    return {
+        "success": True,
+        "deleted_count": len(results["ids"]),
+        "type": doc_type,
     }

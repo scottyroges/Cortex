@@ -63,7 +63,7 @@ MCP_TOOL_SCHEMAS = [
                 "types": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Filter by document types. Valid: code, skeleton, note, commit, insight, tech_stack, initiative. Example: ['note', 'insight'] for understanding-only search.",
+                    "description": "Filter by document types. Valid: skeleton, note, commit, insight, tech_stack, initiative, file_metadata, data_contract, entry_point, dependency. Example: ['note', 'insight'] for understanding-only search.",
                 },
             },
             "required": ["query"],
@@ -71,7 +71,7 @@ MCP_TOOL_SCHEMAS = [
     },
     {
         "name": "ingest_code_into_cortex",
-        "description": "Ingest a codebase directory into Cortex memory with AST-aware chunking.",
+        "description": "Ingest a codebase directory into Cortex memory. Extracts structured metadata (file_metadata, data_contract, entry_point, dependency) to help AI agents navigate codebases.",
         "inputSchema": {
             "type": "object",
             "properties": {
