@@ -28,16 +28,16 @@ Cortex fills this gap by storing:
 
 | Capability | Status | Notes |
 |------------|--------|-------|
-| **Semantic Memory** | ✅ Strong | Insights, notes, commits capture understanding |
+| **Semantic Memory** | ✅ Strong | Insights, notes, session summaries capture understanding |
 | **Initiative Tracking** | ✅ Strong | Multi-session work with summaries |
 | **Session Recall** | ✅ Good | "What did I work on?" queries |
 | **Staleness Detection** | ✅ Good | Insights validated against file changes |
 | **Installation & Updates** | ✅ Good | `cortex update`, `cortex doctor`, migrations |
 | **Auto-Capture** | ✅ Good | Session hooks, LLM summarization, async queue |
-| **Code Indexing** | ⚠️ Marginal | Only ~20-30% of queries benefit over Grep |
-| **Structural Knowledge** | ❌ Gap | No dependencies, entry points, importance |
+| **Metadata-First Indexing** | ✅ Good | file_metadata, data_contract, entry_point, dependency documents |
+| **Structural Knowledge** | ✅ Good | Dependency graph, entry points, data contracts extracted via AST |
 
-*See `analysis/code-indexing-analysis.md` for full analysis.*
+*See `analysis/metadata-first-architecture.md` for design rationale.*
 
 ---
 
@@ -47,9 +47,10 @@ Cortex fills this gap by storing:
 
 - Dockerized deployment with ChromaDB
 - Hybrid search (Vector + BM25 + FlashRank reranking)
-- AST-aware code chunking (18+ languages)
+- Metadata-first indexing (file_metadata, data_contract, entry_point, dependency)
+- AST parsing via tree-sitter (Python, TypeScript, Kotlin)
 - MCP server integration
-- Basic tools: `search_cortex`, `ingest_code_into_cortex`, `save_note_to_cortex`
+- Core tools: `search_cortex`, `ingest_code_into_cortex`, `save_note_to_cortex`
 
 ---
 
@@ -61,7 +62,7 @@ Cortex fills this gap by storing:
 |---------|--------|-------------|
 | Insights | ✅ | Understanding anchored to specific files with staleness detection |
 | Notes | ✅ | Decisions, learnings, domain knowledge |
-| Commits | ✅ | Session summaries with context |
+| Session Summaries | ✅ | Auto-captured session context with changed files |
 | Initiatives | ✅ | Multi-session work tracking with focus system |
 | Recall | ✅ | "What did I work on this week?" timeline view |
 | Summarize | ✅ | Narrative summary of initiative progress |
@@ -69,9 +70,9 @@ Cortex fills this gap by storing:
 
 ---
 
-## Phase 3: Zero-Friction & Developer Experience 🔄
+## Phase 3: Zero-Friction & Developer Experience ✅
 
-*Reduce barriers to adoption and usage. Make Cortex effortless to install, use, and explore.*
+*Complete. Cortex is effortless to install, use, and explore.*
 
 ### Memory Browser ✅
 
@@ -127,30 +128,23 @@ Cortex fills this gap by storing:
 
 ---
 
-## Phase 4: Smarter Search 🔄
+## Phase 4: Smarter Search ✅
 
-*Surface understanding first, not code noise.*
+*Understanding surfaces first, not code noise.*
 
-### Completed ✅
+| Feature | Status | Description |
+|---------|--------|-------------|
+| **Type-Based Scoring** | ✅ | Boost insights (2x), notes (1.5x), session_summaries (1.5x). `src/search/type_scoring.py` |
+| **Document Type Filter** | ✅ | `types` parameter filters by document type with branch-aware filtering |
+| **Conditional Index Rebuild** | ✅ | BM25 index cached, thread-safe with `RLock`, ~3s faster when warm |
+| **Metadata-First Mode** | ✅ | No raw code chunks - only structured metadata (file_metadata, etc.) |
+| **Entry Point Detection** | ✅ | Auto-extracted during ingest (HTTP routes, CLI commands, main functions) |
 
-| Feature | Description | Value |
-|---------|-------------|-------|
-| **Type-Based Scoring** | Boost insights (2x), notes (1.5x), session_summaries (1.5x) over code chunks. Implemented in `src/search/type_scoring.py`. | Understanding surfaces before implementation |
-| **Document Type Filter** | `types` parameter on `search_cortex` filters by document type (note, insight, session_summary, code, skeleton, tech_stack, initiative). Branch filtering applies only to code/skeleton. | Skip code noise for "why" questions |
-| **Conditional Index Rebuild** | BM25 index cached and only rebuilt when collection changes. Added thread-safety with `RLock`, `invalidate()` method. ~3s faster per search when warm. | Performance optimization |
-
-### High Priority
-
-| Feature | Description | Value |
-|---------|-------------|-------|
-| **Skeleton + Memory Mode** | Option to skip code indexing entirely. Index only skeleton + semantic memory. | 10-100x smaller index, higher signal |
-
-### Medium Priority
+### Future Enhancements
 
 | Feature | Description | Value |
 |---------|-------------|-------|
-| **Importance Scoring** | Analyze git frequency + import centrality. Rank results by importance. | High-impact files surface first |
-| **Entry Point Detection** | Auto-detect main/index files. Flag as navigation starting points. | Reduce onboarding friction |
+| **Importance Scoring** | Analyze git frequency + import centrality | High-impact files surface first |
 
 ---
 
@@ -201,27 +195,28 @@ Cortex fills this gap by storing:
 
 ---
 
-## Phase 5: Structural Intelligence ⬜
+## Phase 5: Structural Intelligence 🔄
 
 *Fill the gaps that Grep fundamentally cannot address.*
 
 ### Codebase Understanding
 
-| Feature | Description | Value |
-|---------|-------------|-------|
-| **Dependency Graph** | Parse imports during ingest. Build file→file relationships. | "What depends on X?" / Impact analysis |
-| **Entry Point Map** | Systematic capture of "where does feature X start?" | Navigation knowledge |
-| **Cross-File Relationships** | Track which files are commonly edited together. | "Related files" for context |
-| **Architecture Detection** | Identify patterns: monorepo structure, layer boundaries, module purposes. | Automatic codebase orientation |
+| Feature | Status | Description |
+|---------|--------|-------------|
+| **Dependency Graph** | ✅ | Imports parsed during ingest, file→file relationships with impact_tier |
+| **Entry Point Map** | ✅ | HTTP routes, CLI commands, main functions extracted as entry_point docs |
+| **Data Contracts** | ✅ | Interfaces, types, schemas, dataclasses extracted as data_contract docs |
+| **Cross-File Relationships** | ⬜ | Track which files are commonly edited together |
+| **Architecture Detection** | ⬜ | Identify patterns: monorepo structure, layer boundaries |
 
 ### Datastore Management
 
-| Feature | Description | Value |
-|---------|-------------|-------|
-| **Async Operations** | Background processing for large ingests | Non-blocking workflows |
-| **Datastore Analysis** | Stats by type, repository, storage size | Understand storage usage |
-| **Cleanup Tools** | Remove orphaned chunks, stale entries | Keep index healthy |
-| **Selective Purge** | Delete by repository, branch, type, date range | Fine-grained cleanup |
+| Feature | Status | Description |
+|---------|--------|-------------|
+| **Async Operations** | ✅ | Background processing for large ingests with progress tracking |
+| **Datastore Analysis** | ✅ | Stats by type via browse API and web UI |
+| **Cleanup Tools** | ⬜ | Remove orphaned chunks, stale entries |
+| **Selective Purge** | ⬜ | Delete by repository, branch, type, date range |
 
 ---
 
@@ -280,15 +275,22 @@ Cortex fills this gap by storing:
         ┌───────────────────────────────────┼───────────────────────────────────┐
         │                                   │                                   │
 ┌───────▼───────┐                  ┌────────▼────────┐                 ┌────────▼────────┐
-│    Search     │                  │    Ingestion    │                 │   Notes/Commits │
-│ Vector + BM25 │                  │  AST Chunking   │                 │   Insights      │
-└───────┬───────┘                  └────────┬────────┘                 └─────────────────┘
-        │                                   │
-┌───────▼───────┐                  ┌────────▼────────┐
-│   FlashRank   │                  │    ChromaDB     │
-│   Reranker    │                  │   (Embedded)    │
-└───────────────┘                  └─────────────────┘
+│    Search     │                  │    Ingestion    │                 │  Semantic Memory│
+│ Vector + BM25 │                  │ Metadata-First  │                 │ Notes, Insights │
+└───────┬───────┘                  │ + AST Parsing   │                 │ Session Summaries│
+        │                          └────────┬────────┘                 └─────────────────┘
+┌───────▼───────┐                           │
+│   FlashRank   │                  ┌────────▼────────┐
+│   Reranker    │                  │    ChromaDB     │
+└───────────────┘                  │   (Embedded)    │
+                                   └─────────────────┘
 ```
+
+**Document Types:**
+- **Navigation**: skeleton, file_metadata, dependency
+- **Usage**: data_contract, entry_point, idiom
+- **Memory**: note, insight, session_summary, initiative
+- **Context**: tech_stack
 
 ---
 
