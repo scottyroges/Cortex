@@ -18,7 +18,7 @@ from mcp.server.fastmcp import FastMCP
 
 from logging_config import get_logger, setup_logging
 from src.tools import (
-    commit_to_cortex,
+    session_summary_to_cortex,
     complete_initiative,
     configure_cortex,
     create_initiative,
@@ -60,7 +60,7 @@ mcp.tool()(ingest_code_into_cortex)
 
 # Notes
 mcp.tool()(save_note_to_cortex)
-mcp.tool()(commit_to_cortex)
+mcp.tool()(session_summary_to_cortex)
 mcp.tool()(insight_to_cortex)
 mcp.tool()(validate_insight)
 

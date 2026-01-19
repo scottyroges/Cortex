@@ -44,8 +44,8 @@ class NoteRequest(BaseModel):
     repository: str = "notes"
 
 
-class CommitRequest(BaseModel):
-    """Request body for session commit (from auto-capture hook)."""
+class SessionSummaryRequest(BaseModel):
+    """Request body for session summary (from auto-capture hook)."""
     summary: str
     changed_files: list[str] = []
     repository: str = "global"
@@ -288,13 +288,13 @@ def get_backups() -> dict[str, Any]:
 # --- Auto-Capture Endpoints ---
 
 
-@router.post("/commit")
-def commit_session(request: CommitRequest) -> dict[str, Any]:
+@router.post("/session-summary")
+def save_session_summary(request: SessionSummaryRequest) -> dict[str, Any]:
     """
-    Commit a session summary to Cortex memory.
+    Save a session summary to Cortex memory.
 
     Used by the auto-capture hook to save session summaries.
-    This is a simplified version of commit_to_cortex MCP tool.
+    This is a simplified version of session_summary_to_cortex MCP tool.
 
     Args:
         summary: Session summary text
@@ -304,13 +304,13 @@ def commit_session(request: CommitRequest) -> dict[str, Any]:
     """
     from datetime import timezone
 
-    logger.info(f"Commit session: repository={request.repository}, files={len(request.changed_files)}")
+    logger.info(f"Save session summary: repository={request.repository}, files={len(request.changed_files)}")
 
     # Scrub secrets from summary
     clean_summary = scrub_secrets(request.summary)
 
     # Generate document ID
-    doc_id = f"commit:{uuid.uuid4().hex[:8]}"
+    doc_id = f"session_summary:{uuid.uuid4().hex[:8]}"
 
     # Build document content
     content = f"Session Summary:\n\n{clean_summary}"
@@ -319,7 +319,7 @@ def commit_session(request: CommitRequest) -> dict[str, Any]:
 
     # Build metadata
     metadata = {
-        "type": "commit",
+        "type": "session_summary",
         "repository": request.repository,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "status": "active",
@@ -348,11 +348,11 @@ def commit_session(request: CommitRequest) -> dict[str, Any]:
     except Exception as e:
         logger.warning(f"Failed to rebuild search index: {e}")
 
-    logger.info(f"Committed session: id={doc_id}")
+    logger.info(f"Session summary saved: id={doc_id}")
 
     return {
         "status": "success",
-        "commit_id": doc_id,
+        "session_id": doc_id,
         "summary_length": len(clean_summary),
         "files_count": len(request.changed_files),
     }
@@ -484,20 +484,20 @@ def process_sync(request: ProcessSyncRequest) -> dict[str, Any]:
         logger.error(f"Summarization failed: {e}")
         return {"status": "error", "error": f"Summarization failed: {e}"}
 
-    # Commit to Cortex using the existing commit endpoint logic
+    # Save session summary using the existing endpoint logic
     try:
-        commit_result = commit_session(CommitRequest(
+        save_result = save_session_summary(SessionSummaryRequest(
             summary=summary,
             changed_files=request.files_edited,
             repository=request.repository,
         ))
-        logger.info(f"Session committed synchronously: {request.session_id}")
+        logger.info(f"Session summary saved synchronously: {request.session_id}")
         return {
             "status": "success",
             "session_id": request.session_id,
             "summary_length": len(summary),
-            "commit_result": commit_result,
+            "save_result": save_result,
         }
     except Exception as e:
-        logger.error(f"Commit failed: {e}")
-        return {"status": "error", "error": f"Commit failed: {e}"}
+        logger.error(f"Save session summary failed: {e}")
+        return {"status": "error", "error": f"Save session summary failed: {e}"}

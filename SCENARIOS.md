@@ -44,7 +44,7 @@ This document describes the primary workflows for how Claude Code interacts with
 - "Find the error handling pattern"
 
 **Flow:**
-1. `search_cortex("how does auth work")` - Semantic search across code, notes, commits
+1. `search_cortex("how does auth work")` - Semantic search across code, notes, session summaries
 
 **Tools Used:** `search_cortex`
 
@@ -59,7 +59,7 @@ This document describes the primary workflows for how Claude Code interacts with
 **Flow:**
 1. `orient_session(path)` - Check staleness, see what initiative was active
 2. If `needs_reindex: true`, run `ingest_code_into_cortex(path)` to catch up
-3. `search_cortex("recent commits")` - Find what changed
+3. `search_cortex("recent session summaries")` - Find what changed
 4. `get_skeleton(repository)` - Re-orient on file structure
 
 **Tools Used:** `orient_session`, `ingest_code_into_cortex`, `search_cortex`, `get_skeleton`
@@ -71,8 +71,8 @@ This document describes the primary workflows for how Claude Code interacts with
 **Context:** Claude finishes a chunk of work and wants to preserve context for next session.
 
 **Flow:**
-1. `commit_to_cortex(summary, changed_files, repository)` - Save detailed session summary + re-index changed files
-2. If commit summary contains completion signals (e.g., "complete", "done", "shipped"), Claude will be prompted to mark the initiative as complete
+1. `session_summary_to_cortex(summary, changed_files, repository)` - Save detailed session summary + re-index changed files
+2. If summary contains completion signals (e.g., "complete", "done", "shipped"), Claude will be prompted to mark the initiative as complete
 
 **Example Summary** (write detailed summaries that capture full context):
 ```
@@ -91,7 +91,7 @@ src/middleware.py (integrated auth check)
 TODO: Add token revocation endpoint for logout, rate limit refresh attempts
 ```
 
-**Tools Used:** `commit_to_cortex`
+**Tools Used:** `session_summary_to_cortex`
 
 ---
 
@@ -158,11 +158,11 @@ test_data/
 
 **Context:** User begins work on a new epic, migration, or multi-session feature.
 
-**Problem:** Need to track work across multiple sessions and tag commits/notes.
+**Problem:** Need to track work across multiple sessions and tag session summaries/notes.
 
 **Flow:**
 1. `create_initiative(repository, "Auth Migration", goal="Migrate from session-based to JWT auth")` - Creates initiative and auto-focuses it
-2. All subsequent `commit_to_cortex` and `save_note_to_cortex` calls are automatically tagged with this initiative
+2. All subsequent `session_summary_to_cortex` and `save_note_to_cortex` calls are automatically tagged with this initiative
 
 **Tools Used:** `create_initiative`
 
@@ -174,7 +174,7 @@ test_data/
 
 **Flow:**
 1. `create_initiative(repository, "Hotfix: Login Bug")` - Creates and focuses new initiative
-2. Work on hotfix, commits are tagged with "Hotfix: Login Bug"
+2. Work on hotfix, session summaries are tagged with "Hotfix: Login Bug"
 3. `complete_initiative("Hotfix: Login Bug", summary="Fixed race condition in auth...")` - Mark done
 4. `focus_initiative(repository, "Auth Migration")` - Return to previous work
 
@@ -186,9 +186,9 @@ test_data/
 
 **Context:** User finishes a multi-session piece of work.
 
-**Trigger 1 - Completion signal in commit:**
+**Trigger 1 - Completion signal in session summary:**
 ```
-commit_to_cortex(summary="Auth migration complete. All tests passing...")
+session_summary_to_cortex(summary="Auth migration complete. All tests passing...")
 # Response includes: initiative.completion_signal_detected = True
 # Claude asks: "Ready to mark 'Auth Migration' as complete?"
 ```
@@ -242,7 +242,7 @@ complete_initiative(initiative="Auth Migration", summary="Successfully migrated 
 
 **Flow:**
 1. `search_cortex("token storage", initiative="Auth Migration")` - Filter to specific initiative
-2. Results only include commits/notes tagged with that initiative (plus untagged code)
+2. Results only include session summaries/notes tagged with that initiative (plus untagged code)
 
 **Flow (completed initiatives):**
 1. `list_initiatives(repository, status="completed")` - Find old initiative name
@@ -288,7 +288,7 @@ complete_initiative(initiative="Auth Migration", summary="Successfully migrated 
 **Problem:** "What did I do last week?" requires manual search queries.
 
 **Flow:**
-1. `recall_recent_work(repository, days=7)` - Get timeline of recent commits/notes
+1. `recall_recent_work(repository, days=7)` - Get timeline of recent session summaries/notes
 
 **Example Response:**
 ```json
@@ -301,7 +301,7 @@ complete_initiative(initiative="Auth Migration", summary="Successfully migrated 
       "date": "2026-01-11",
       "day_name": "Saturday",
       "items": [
-        {"type": "commit", "content": "Added auth middleware..."},
+        {"type": "session_summary", "content": "Added auth middleware..."},
         {"type": "note", "title": "OAuth decision", "content": "Using PKCE for mobile..."}
       ]
     }
@@ -334,16 +334,16 @@ complete_initiative(initiative="Auth Migration", summary="Successfully migrated 
     "status": "active"
   },
   "stats": {
-    "commits": 5,
+    "session_summaries": 5,
     "notes": 3,
     "files_touched": 12,
     "duration": "2 weeks"
   },
   "timeline": [
-    {"date": "Jan 01", "type": "commit", "summary": "Initial auth scaffolding..."},
+    {"date": "Jan 01", "type": "session_summary", "summary": "Initial auth scaffolding..."},
     {"date": "Jan 05", "type": "note", "summary": "Decided on refresh token strategy..."}
   ],
-  "narrative": "**Auth Migration**: Migrate to JWT auth\n\nActivity: 5 commits and 3 notes recorded.\n\nStatus: Active\n\nLast activity: 2 days ago"
+  "narrative": "**Auth Migration**: Migrate to JWT auth\n\nActivity: 5 session summaries and 3 notes recorded.\n\nStatus: Active\n\nLast activity: 2 days ago"
 }
 ```
 
@@ -451,7 +451,7 @@ insight_to_cortex(
 
 **Context:** User ends a Claude Code session after doing significant work.
 
-**Problem:** Manual `commit_to_cortex` requires discipline and is often forgotten.
+**Problem:** Manual `session_summary_to_cortex` requires discipline and is often forgotten.
 
 **How Auto-Capture Works:**
 1. Claude Code triggers `SessionEnd` hook when session closes
@@ -529,7 +529,7 @@ autocapture:
 | First indexing | `ingest_code_into_cortex`, `set_repo_context`, `create_initiative` |
 | Searching | `search_cortex` |
 | Resuming work | `orient_session`, `ingest_code_into_cortex`, `search_cortex` |
-| Saving progress | `commit_to_cortex` |
+| Saving progress | `session_summary_to_cortex` |
 | Capturing research | `save_note_to_cortex` |
 | Quick context | `get_context_from_cortex`, `get_skeleton` |
 | Selective ingestion | `ingest_code_into_cortex` (with `include_patterns` or `.cortexignore`) |
@@ -557,7 +557,7 @@ autocapture:
 | `search_cortex` | Semantic search with initiative filtering, boosting, and staleness detection |
 | `ingest_code_into_cortex` | Index codebase with AST chunking |
 | `save_note_to_cortex` | Save notes, decisions, research (auto-tagged with initiative) |
-| `commit_to_cortex` | Save session summary + re-index files (auto-tagged, completion detection) |
+| `session_summary_to_cortex` | Save session summary + re-index files (auto-tagged, completion detection) |
 | `set_repo_context` | Set static tech stack info |
 | `set_initiative` | Legacy - use `create_initiative` instead |
 | `get_context_from_cortex` | Quick context retrieval |

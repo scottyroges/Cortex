@@ -328,7 +328,7 @@ def process_sync(
     """
     Process session synchronously by calling daemon's /process-sync endpoint.
 
-    Waits for LLM summarization and commit to complete before returning.
+    Waits for LLM summarization and session summary save to complete before returning.
     Falls back to False if daemon is unavailable or times out.
 
     Args:

@@ -166,8 +166,8 @@ def list_initiatives(
         for i, doc_id in enumerate(results.get("ids", [])):
             meta = results["metadatas"][i] if results.get("metadatas") else {}
 
-            # Count commits/notes for this initiative
-            commit_count, note_count = _count_initiative_items(collection, doc_id)
+            # Count session summaries/notes for this initiative
+            session_count, note_count = _count_initiative_items(collection, doc_id)
 
             initiatives.append({
                 "id": doc_id,
@@ -177,7 +177,7 @@ def list_initiatives(
                 "created_at": meta.get("created_at", ""),
                 "updated_at": meta.get("updated_at", ""),
                 "completed_at": meta.get("completed_at", ""),
-                "commit_count": commit_count,
+                "session_count": session_count,
                 "note_count": note_count,
             })
 
@@ -203,7 +203,7 @@ def focus_initiative(
     initiative: str,
 ) -> str:
     """
-    Set focus to an initiative. New commits/notes will be tagged with this initiative.
+    Set focus to an initiative. New session summaries/notes will be tagged with this initiative.
 
     Args:
         repository: Repository identifier
@@ -329,7 +329,7 @@ def complete_initiative(
             _clear_focus(collection, repo)
 
         # Get archive stats
-        commit_count, note_count = _count_initiative_items(collection, initiative_id)
+        session_count, note_count = _count_initiative_items(collection, initiative_id)
 
         # Calculate duration
         created_at = meta.get("created_at", "")
@@ -345,7 +345,7 @@ def complete_initiative(
             "repository": repo,
             "summary": summary,
             "archive": {
-                "commit_count": commit_count,
+                "session_count": session_count,
                 "note_count": note_count,
                 "duration": duration,
             },
@@ -417,16 +417,16 @@ _find_initiative = find_initiative
 
 
 def _count_initiative_items(collection, initiative_id: str) -> tuple[int, int]:
-    """Count commits and notes for an initiative."""
-    commit_count = 0
+    """Count session summaries and notes for an initiative."""
+    session_count = 0
     note_count = 0
 
     try:
-        # Count commits
-        commit_result = collection.get(
-            where={"$and": [{"type": "commit"}, {"initiative_id": initiative_id}]},
+        # Count session summaries
+        session_result = collection.get(
+            where={"$and": [{"type": "session_summary"}, {"initiative_id": initiative_id}]},
         )
-        commit_count = len(commit_result.get("ids", []))
+        session_count = len(session_result.get("ids", []))
 
         # Count notes
         note_result = collection.get(
@@ -437,20 +437,20 @@ def _count_initiative_items(collection, initiative_id: str) -> tuple[int, int]:
     except Exception as e:
         logger.warning(f"Failed to count initiative items: {e}")
 
-    return commit_count, note_count
+    return session_count, note_count
 
 
 def _get_recent_context(collection, initiative_id: str, limit: int = 5) -> list:
-    """Get recent commits/notes for an initiative."""
+    """Get recent session summaries/notes for an initiative."""
     context = []
 
     try:
-        # Get commits and notes for this initiative
+        # Get session summaries and notes for this initiative
         result = collection.get(
             where={
                 "$and": [
                     {"initiative_id": initiative_id},
-                    {"type": {"$in": ["commit", "note"]}},
+                    {"type": {"$in": ["session_summary", "note"]}},
                 ]
             },
             include=["documents", "metadatas"],

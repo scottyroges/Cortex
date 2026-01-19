@@ -32,7 +32,7 @@ class UpdateDocumentRequest(BaseModel):
 EDITABLE_FIELDS = {
     "note": {"title", "content", "tags"},
     "insight": {"title", "content", "tags", "files"},
-    "commit": {"content", "files"},
+    "session_summary": {"content", "files"},
 }
 
 
@@ -116,7 +116,7 @@ def browse_list(
 
     Args:
         repository: Filter by repository name
-        type: Filter by document type (note, commit, insight, initiative, file_metadata, etc.)
+        type: Filter by document type (note, session_summary, insight, initiative, file_metadata, etc.)
         limit: Maximum results
     """
     logger.info(f"Browse list requested: repository={repository}, type={doc_type}")

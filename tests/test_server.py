@@ -152,29 +152,29 @@ class TestIngestCodeIntoCortex:
         assert stats3["files_processed"] == 1
 
 
-class TestCommitToCortex:
-    """Tests for commit_to_cortex tool."""
+class TestSessionSummaryToCortex:
+    """Tests for session_summary_to_cortex tool."""
 
-    def test_commit_saves_summary(self, temp_dir: Path, temp_chroma_client):
-        """Test that commit saves summary to collection."""
+    def test_session_summary_saves_summary(self, temp_dir: Path, temp_chroma_client):
+        """Test that session summary saves to collection."""
         import uuid
 
         from src.security import scrub_secrets
         from src.storage import get_or_create_collection
 
-        collection = get_or_create_collection(temp_chroma_client, "commit_test")
+        collection = get_or_create_collection(temp_chroma_client, "session_summary_test")
 
-        # Simulate what commit_to_cortex does
+        # Simulate what session_summary_to_cortex does
         summary = "Implemented new authentication flow with JWT tokens"
         changed_files = ["/app/auth.py", "/app/middleware.py"]
 
-        note_id = f"commit:{uuid.uuid4().hex[:8]}"
+        doc_id = f"session_summary:{uuid.uuid4().hex[:8]}"
 
         collection.upsert(
-            ids=[note_id],
+            ids=[doc_id],
             documents=[f"Session Summary:\n\n{scrub_secrets(summary)}\n\nChanged files: {', '.join(changed_files)}"],
             metadatas=[{
-                "type": "commit",
+                "type": "session_summary",
                 "repository": "test",
                 "branch": "main",
                 "files": json.dumps(changed_files),
@@ -182,10 +182,10 @@ class TestCommitToCortex:
         )
 
         # Verify saved
-        results = collection.get(ids=[note_id], include=["documents", "metadatas"])
+        results = collection.get(ids=[doc_id], include=["documents", "metadatas"])
         assert len(results["ids"]) == 1
         assert "authentication" in results["documents"][0].lower()
-        assert results["metadatas"][0]["type"] == "commit"
+        assert results["metadatas"][0]["type"] == "session_summary"
 
 
 class TestSaveNoteToCortex:
@@ -867,8 +867,8 @@ class TestBranchAwareFilter:
         assert or_clause is not None
         # Should have code/skeleton filtered by branch
         assert any("type" in c.get("$and", [{}])[0] for c in or_clause if "$and" in c)
-        # Should have non-code types always included (note, commit, tech_stack, initiative, insight)
-        assert any(c.get("type", {}).get("$in") == ["note", "commit", "tech_stack", "initiative", "insight"] for c in or_clause)
+        # Should have non-code types always included (note, session_summary, tech_stack, initiative, insight)
+        assert any(c.get("type", {}).get("$in") == ["note", "session_summary", "tech_stack", "initiative", "insight"] for c in or_clause)
 
     def test_filter_with_unknown_branch(self):
         """Test that unknown branch returns simple project filter."""
@@ -942,7 +942,7 @@ class TestBranchAwareFilter:
         assert branch_clause["branch"]["$in"] == ["feature", "main"]
 
     def test_filter_non_code_types_not_filtered(self):
-        """Test that note, commit, tech_stack, initiative, insight are not branch-filtered."""
+        """Test that note, session_summary, tech_stack, initiative, insight are not branch-filtered."""
         from src.tools.search import build_branch_aware_filter
 
         result = build_branch_aware_filter(repository=None, branches=["feature", "main"])
@@ -957,7 +957,7 @@ class TestBranchAwareFilter:
                     break
 
         assert non_filtered is not None
-        assert non_filtered["type"]["$in"] == ["note", "commit", "tech_stack", "initiative", "insight"]
+        assert non_filtered["type"]["$in"] == ["note", "session_summary", "tech_stack", "initiative", "insight"]
         # Should NOT have branch filter
         assert "branch" not in non_filtered
         assert "$and" not in non_filtered
@@ -1054,26 +1054,26 @@ class TestBranchAwareSearch:
         assert len(results) > 0
         assert any(r["meta"]["type"] == "note" for r in results)
 
-    def test_commits_not_filtered_by_branch(self, temp_chroma_client):
-        """Test that commits are visible from any branch."""
+    def test_session_summaries_not_filtered_by_branch(self, temp_chroma_client):
+        """Test that session summaries are visible from any branch."""
         from src.search import HybridSearcher
         from src.storage import get_or_create_collection
         from src.tools.search import build_branch_aware_filter
 
-        collection = get_or_create_collection(temp_chroma_client, "commits_branch_test")
+        collection = get_or_create_collection(temp_chroma_client, "session_summaries_branch_test")
 
-        # Add a commit on main branch
+        # Add a session summary on main branch
         collection.add(
             documents=[
                 "Session Summary: Implemented user authentication with JWT tokens",
             ],
-            ids=["commit-1"],
+            ids=["session-1"],
             metadatas=[
-                {"type": "commit", "repository": "test", "branch": "main", "files": "[]"},
+                {"type": "session_summary", "repository": "test", "branch": "main", "files": "[]"},
             ],
         )
 
-        # Search from a different branch - commit should still be visible
+        # Search from a different branch - session summary should still be visible
         where_filter = build_branch_aware_filter(repository="test", branches=["feature-y"])
         searcher = HybridSearcher(collection)
         searcher.build_index(where_filter)
@@ -1082,7 +1082,7 @@ class TestBranchAwareSearch:
 
         # Commit should be found
         assert len(results) > 0
-        assert any(r["meta"]["type"] == "commit" for r in results)
+        assert any(r["meta"]["type"] == "session_summary" for r in results)
 
     def test_code_on_other_branch_excluded(self, temp_chroma_client):
         """Test that code on unrelated branches is excluded."""
@@ -1162,13 +1162,13 @@ class TestTypeFilter:
             documents=[
                 "Architecture note: Use microservices pattern",
                 "def process_order(): return calculate_total()",
-                "Session commit: Implemented order processing",
+                "Session summary: Implemented order processing",
             ],
-            ids=["note-1", "code-1", "commit-1"],
+            ids=["note-1", "code-1", "session-1"],
             metadatas=[
                 {"type": "note", "repository": "test", "branch": "main", "title": "Architecture", "tags": ""},
                 {"type": "file_metadata", "repository": "test", "branch": "main", "file_path": "/src/order.py", "language": "python"},
-                {"type": "commit", "repository": "test", "branch": "main", "files": "[]"},
+                {"type": "session_summary", "repository": "test", "branch": "main", "files": "[]"},
             ],
         )
 
@@ -1179,7 +1179,7 @@ class TestTypeFilter:
 
         results = searcher.search("order", top_k=10, where_filter=where_filter)
 
-        # Should only return notes, not code or commits
+        # Should only return notes, not code or session summaries
         for r in results:
             assert r["meta"]["type"] == "note", f"Expected note, got {r['meta']['type']}"
 
@@ -1197,14 +1197,14 @@ class TestTypeFilter:
                 "Architecture note: Use Redis for caching",
                 "Insight: The auth module uses observer pattern",
                 "def authenticate(): return jwt.encode()",
-                "Session commit: Added caching layer",
+                "Session summary: Added caching layer",
             ],
-            ids=["note-1", "insight-1", "code-1", "commit-1"],
+            ids=["note-1", "insight-1", "code-1", "session-1"],
             metadatas=[
                 {"type": "note", "repository": "test", "branch": "main", "title": "Caching", "tags": ""},
                 {"type": "insight", "repository": "test", "branch": "main", "file_path": "/src/auth.py"},
                 {"type": "file_metadata", "repository": "test", "branch": "main", "file_path": "/src/auth.py", "language": "python"},
-                {"type": "commit", "repository": "test", "branch": "main", "files": "[]"},
+                {"type": "session_summary", "repository": "test", "branch": "main", "files": "[]"},
             ],
         )
 
@@ -1268,14 +1268,14 @@ class TestTypeFilter:
                 "def feature_code(): pass",
                 "def main_code(): pass",
                 "Note about the code",
-                "Commit about the code",
+                "Session summary about the code",
             ],
-            ids=["code-feature", "code-main", "note-1", "commit-1"],
+            ids=["code-feature", "code-main", "note-1", "session-1"],
             metadatas=[
                 {"type": "file_metadata", "repository": "test", "branch": "feature-x", "file_path": "/src/app.py", "language": "python"},
                 {"type": "file_metadata", "repository": "test", "branch": "main", "file_path": "/src/app.py", "language": "python"},
                 {"type": "note", "repository": "test", "branch": "main", "title": "Code Note", "tags": ""},
-                {"type": "commit", "repository": "test", "branch": "main", "files": "[]"},
+                {"type": "session_summary", "repository": "test", "branch": "main", "files": "[]"},
             ],
         )
 
@@ -1286,7 +1286,7 @@ class TestTypeFilter:
 
         results = searcher.search("code", top_k=10, where_filter=where_filter)
 
-        # Should return main branch code and notes (but not feature-x code or commits)
+        # Should return main branch code and notes (but not feature-x code or session summaries)
         types_found = {r["meta"]["type"] for r in results}
         assert "code" in types_found or "note" in types_found
 
@@ -1371,7 +1371,7 @@ class TestTypeFilter:
         result = build_branch_aware_filter(
             repository="test",
             branches=["main"],
-            types=["note", "insight", "commit"]
+            types=["note", "insight", "session_summary"]
         )
 
         # Should have simple type filter without branch conditions
@@ -1386,7 +1386,7 @@ class TestTypeFilter:
                 break
 
         assert type_filter is not None
-        assert type_filter["type"]["$in"] == ["note", "insight", "commit"]
+        assert type_filter["type"]["$in"] == ["note", "insight", "session_summary"]
 
     def test_build_filter_types_only_branch_filtered(self):
         """Test filter with only branch-filtered types (code, skeleton)."""

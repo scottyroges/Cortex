@@ -201,10 +201,10 @@ def test_auth_token():
             ))
             assert len(skeleton_result.get("results", [])) > 0 or True, "At minimum skeleton should exist"
 
-    def test_full_session_with_notes_and_commit(self, project_with_code, temp_chroma_client):
-        """Test complete session: orient -> ingest -> search -> save note -> commit."""
+    def test_full_session_with_notes_and_session_summary(self, project_with_code, temp_chroma_client):
+        """Test complete session: orient -> ingest -> search -> save note -> session summary."""
         from src.tools.ingest import ingest_code_into_cortex
-        from src.tools.notes import commit_to_cortex, save_note_to_cortex
+        from src.tools.notes import session_summary_to_cortex, save_note_to_cortex
         from src.tools.orient import orient_session
         from src.tools.search import search_cortex
 
@@ -236,8 +236,8 @@ def test_auth_token():
         assert note_result["status"] == "saved"
         assert "note_id" in note_result
 
-        # Commit the session
-        commit_result = json.loads(commit_to_cortex(
+        # Save the session summary
+        summary_result = json.loads(session_summary_to_cortex(
             summary="Explored the codebase architecture. "
                     "Key finding: Database uses simple connection wrapper. "
                     "Auth service generates SHA256 tokens. "
@@ -246,10 +246,10 @@ def test_auth_token():
             repository=repo,
         ))
 
-        assert commit_result["status"] == "success"
-        assert "commit_id" in commit_result
+        assert summary_result["status"] == "success"
+        assert "session_id" in summary_result
 
-        # Verify the note and commit are searchable
+        # Verify the note and session summary are searchable
         search_notes = json.loads(search_cortex(
             query="database connection wrapper architecture",
             repository=repo,
@@ -274,7 +274,7 @@ class TestInitiativeLifecycle:
             focus_initiative,
             list_initiatives,
         )
-        from src.tools.notes import commit_to_cortex, save_note_to_cortex
+        from src.tools.notes import session_summary_to_cortex, save_note_to_cortex
         from src.tools.recall import summarize_initiative
         from src.tools.search import search_cortex
 
@@ -312,15 +312,15 @@ class TestInitiativeLifecycle:
         # Initiative info is nested under "initiative" key
         assert note1.get("initiative", {}).get("id") == initiative_id  # Auto-tagged
 
-        # Step 4: Save a commit
-        commit1 = json.loads(commit_to_cortex(
+        # Step 4: Save a session summary
+        session1 = json.loads(session_summary_to_cortex(
             summary="Implemented JWT token generation. "
                     "Added refresh token rotation. "
                     "Tests passing.",
             changed_files=["src/auth/jwt.py", "tests/test_jwt.py"],
             repository=repo,
         ))
-        assert commit1["status"] == "success"
+        assert session1["status"] == "success"
 
         # Step 5: Complete the initiative
         complete_result = json.loads(complete_initiative(
@@ -343,7 +343,7 @@ class TestInitiativeLifecycle:
         ))
 
         assert "initiative" in summary_result
-        assert summary_result["stats"]["commits"] >= 1
+        assert summary_result["stats"]["session_summaries"] >= 1
         assert summary_result["stats"]["notes"] >= 1
 
         # Step 8: Search should still find initiative-related content
@@ -497,7 +497,7 @@ class TestRecallWorkflow:
     def test_recall_recent_work(self, temp_chroma_client):
         """Test recalling recent work across sessions."""
         from src.tools.initiatives import create_initiative
-        from src.tools.notes import commit_to_cortex, save_note_to_cortex
+        from src.tools.notes import session_summary_to_cortex, save_note_to_cortex
         from src.tools.recall import recall_recent_work
 
         reset_services()
@@ -525,8 +525,8 @@ class TestRecallWorkflow:
             title="API Design",
         ))
 
-        # Save a commit
-        json.loads(commit_to_cortex(
+        # Save a session summary
+        json.loads(session_summary_to_cortex(
             summary="Implemented initial project structure with API endpoints",
             changed_files=["src/api.py", "src/models.py"],
             repository=repo,
@@ -539,7 +539,7 @@ class TestRecallWorkflow:
         ))
 
         assert "timeline" in recall_result
-        assert recall_result["total_items"] >= 3  # 2 notes + 1 commit
+        assert recall_result["total_items"] >= 3  # 2 notes + 1 session summary
 
         # Verify different types are included by checking all items in timeline
         all_items = []
@@ -548,7 +548,7 @@ class TestRecallWorkflow:
 
         types_found = {item["type"] for item in all_items}
         assert "note" in types_found
-        assert "commit" in types_found
+        assert "session_summary" in types_found
 
 
 class TestErrorRecovery:

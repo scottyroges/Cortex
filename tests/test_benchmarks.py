@@ -78,7 +78,7 @@ File relationship: auth.py depends on crypto_utils.py for signing.
             })
             ids.append(f"insight:{uuid.uuid4().hex[:8]}")
 
-        # Add 5 commits
+        # Add 5 session summaries
         for i in range(5):
             documents.append(f"""
 Session {i}: Implemented feature X with tests.
@@ -86,10 +86,10 @@ Changed files: src/feature.py, tests/test_feature.py
 Key decisions: Used factory pattern for flexibility.
 """)
             metadatas.append({
-                "type": "commit",
+                "type": "session_summary",
                 "repository": "benchmark-repo",
             })
-            ids.append(f"commit:{uuid.uuid4().hex[:8]}")
+            ids.append(f"session_summary:{uuid.uuid4().hex[:8]}")
 
         collection.add(documents=documents, metadatas=metadatas, ids=ids)
         return collection

@@ -48,17 +48,17 @@ class TestRecallRecentWork:
         assert "error" in result
         assert "required" in result["error"].lower()
 
-    def test_recall_returns_recent_commits(self, mock_collection):
-        """Test recall returns commits from the last N days."""
+    def test_recall_returns_recent_session_summaries(self, mock_collection):
+        """Test recall returns session summaries from the last N days."""
         now = datetime.now(timezone.utc)
         yesterday = now - timedelta(days=1)
 
-        # Add a recent commit
+        # Add a recent session summary
         mock_collection.add(
-            ids=["commit:abc123"],
+            ids=["session_summary:abc123"],
             documents=["Session summary: Added new feature"],
             metadatas=[{
-                "type": "commit",
+                "type": "session_summary",
                 "repository": "TestRepo",
                 "created_at": yesterday.isoformat(),
                 "files": '["src/feature.py"]',
@@ -76,12 +76,12 @@ class TestRecallRecentWork:
         now = datetime.now(timezone.utc)
         old_date = now - timedelta(days=30)
 
-        # Add an old commit
+        # Add an old session summary
         mock_collection.add(
-            ids=["commit:old123"],
+            ids=["session_summary:old123"],
             documents=["Old session summary"],
             metadatas=[{
-                "type": "commit",
+                "type": "session_summary",
                 "repository": "TestRepo",
                 "created_at": old_date.isoformat(),
             }],
@@ -99,11 +99,11 @@ class TestRecallRecentWork:
 
         # Add items on different days
         mock_collection.add(
-            ids=["commit:day1", "commit:day2", "note:day1"],
+            ids=["session_summary:day1", "session_summary:day2", "note:day1"],
             documents=["Session 1", "Session 2", "Note 1"],
             metadatas=[
-                {"type": "commit", "repository": "TestRepo", "created_at": yesterday.isoformat()},
-                {"type": "commit", "repository": "TestRepo", "created_at": two_days_ago.isoformat()},
+                {"type": "session_summary", "repository": "TestRepo", "created_at": yesterday.isoformat()},
+                {"type": "session_summary", "repository": "TestRepo", "created_at": two_days_ago.isoformat()},
                 {"type": "note", "repository": "TestRepo", "created_at": yesterday.isoformat()},
             ],
         )
@@ -118,10 +118,10 @@ class TestRecallRecentWork:
         now = datetime.now(timezone.utc)
 
         mock_collection.add(
-            ids=["commit:init1"],
+            ids=["session_summary:init1"],
             documents=["Working on auth"],
             metadatas=[{
-                "type": "commit",
+                "type": "session_summary",
                 "repository": "TestRepo",
                 "created_at": now.isoformat(),
                 "initiative_id": "initiative:abc",
@@ -142,10 +142,10 @@ class TestRecallRecentWork:
         # Add many items
         for i in range(10):
             mock_collection.add(
-                ids=[f"commit:item{i}"],
+                ids=[f"session_summary:item{i}"],
                 documents=[f"Session {i}"],
                 metadatas=[{
-                    "type": "commit",
+                    "type": "session_summary",
                     "repository": "TestRepo",
                     "created_at": (now - timedelta(hours=i)).isoformat(),
                 }],
@@ -198,8 +198,8 @@ class TestSummarizeInitiative:
         assert result["initiative"]["goal"] == "Migrate to JWT auth"
         assert result["initiative"]["status"] == "active"
 
-    def test_summarize_includes_commits_and_notes(self, mock_collection):
-        """Test summarize includes commits and notes."""
+    def test_summarize_includes_session_summaries_and_notes(self, mock_collection):
+        """Test summarize includes session summaries and notes."""
         now = datetime.now(timezone.utc)
 
         # Create initiative
@@ -216,20 +216,20 @@ class TestSummarizeInitiative:
             }],
         )
 
-        # Add commits and notes tagged with initiative
+        # Add session summaries and notes tagged with initiative
         mock_collection.add(
-            ids=["commit:c1", "commit:c2", "note:n1"],
+            ids=["session_summary:c1", "session_summary:c2", "note:n1"],
             documents=["Session 1", "Session 2", "Note about auth"],
             metadatas=[
-                {"type": "commit", "initiative_id": "initiative:abc123", "created_at": now.isoformat()},
-                {"type": "commit", "initiative_id": "initiative:abc123", "created_at": now.isoformat()},
+                {"type": "session_summary", "initiative_id": "initiative:abc123", "created_at": now.isoformat()},
+                {"type": "session_summary", "initiative_id": "initiative:abc123", "created_at": now.isoformat()},
                 {"type": "note", "initiative_id": "initiative:abc123", "created_at": now.isoformat()},
             ],
         )
 
         result = json.loads(summarize_initiative("initiative:abc123"))
 
-        assert result["stats"]["commits"] == 2
+        assert result["stats"]["session_summaries"] == 2
         assert result["stats"]["notes"] == 1
         assert len(result["timeline"]) == 3
 

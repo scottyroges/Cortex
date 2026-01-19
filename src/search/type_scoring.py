@@ -2,7 +2,7 @@
 Type-Based Scoring
 
 Apply score multipliers based on document type to prioritize
-understanding (insights, notes, commits) over code.
+understanding (insights, notes, session_summaries) over code.
 
 Philosophy: "Code can be grepped. Understanding cannot."
 """
@@ -12,13 +12,13 @@ from typing import Any
 
 # Default type multipliers
 # Insights are most valuable (unique understanding tied to code)
-# Notes and commits capture decisions and context
+# Notes and session_summaries capture decisions and context
 # Navigation types (file_metadata, entry_point, data_contract) are high value
 DEFAULT_TYPE_MULTIPLIERS = {
     # Understanding (irreplaceable - grep can't find this)
     "insight": 2.0,
     "note": 1.5,
-    "commit": 1.5,
+    "session_summary": 1.5,
     # Navigation (high value - tells agent where to look)
     "entry_point": 1.4,
     "file_metadata": 1.3,
@@ -38,7 +38,7 @@ def apply_type_boost(
     """
     Apply type-based score multipliers to search results.
 
-    Understanding-type documents (insights, notes, commits) are boosted
+    Understanding-type documents (insights, notes, session_summaries) are boosted
     over code chunks to surface semantic memory first.
 
     Args:

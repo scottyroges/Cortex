@@ -95,7 +95,7 @@ def build_branch_aware_filter(
     Build ChromaDB where filter that applies branch filtering
     only to code and skeleton documents.
 
-    Notes, commits, tech_stack, initiatives are never filtered by branch.
+    Notes, session_summaries, tech_stack, initiatives are never filtered by branch.
 
     Args:
         repository: Optional repository filter
@@ -140,7 +140,7 @@ def build_branch_aware_filter(
         return {"repository": repository} if repository else None
 
     # Types filtered by branch: skeleton, file_metadata, data_contract, entry_point, dependency
-    # Types NOT filtered: note, commit, tech_stack, initiative, insight
+    # Types NOT filtered: note, session_summary, tech_stack, initiative, insight
     branch_filter = {
         "$or": [
             # Code/metadata types: filter by branch
@@ -149,7 +149,7 @@ def build_branch_aware_filter(
                 {"branch": {"$in": branches}}
             ]},
             # Semantic memory types: always include (cross-branch)
-            {"type": {"$in": ["note", "commit", "tech_stack", "initiative", "insight"]}}
+            {"type": {"$in": ["note", "session_summary", "tech_stack", "initiative", "insight"]}}
         ]
     }
 
@@ -168,7 +168,7 @@ VALID_TYPES = {
     "dependency",
     # Semantic memory
     "note",
-    "commit",
+    "session_summary",
     "insight",
     # Context
     "skeleton",
@@ -182,7 +182,7 @@ BRANCH_FILTERED_TYPES = {"skeleton", "file_metadata", "data_contract", "entry_po
 # Search presets for common query patterns
 SEARCH_PRESETS = {
     # "Why did we do X?" - understanding queries
-    "understanding": ["insight", "note", "commit"],
+    "understanding": ["insight", "note", "session_summary"],
     # "Where is X?" - navigation queries
     "navigation": ["file_metadata", "entry_point", "data_contract"],
     # "What's the structure?" - architecture queries
@@ -190,7 +190,7 @@ SEARCH_PRESETS = {
     # "Where is this error coming from?" - debugging
     "trace": ["entry_point", "dependency", "data_contract"],
     # All semantic memory (no code)
-    "memory": ["insight", "note", "commit", "file_metadata"],
+    "memory": ["insight", "note", "session_summary", "file_metadata"],
 }
 
 
@@ -344,11 +344,11 @@ class SearchPipeline:
         rerank_time = time.time() - rerank_start
         logger.debug(f"Reranking: {len(ranked)} results in {rerank_time*1000:.1f}ms")
 
-        # Apply type-based scoring (insights 2x, notes/commits 1.5x, code 1x)
+        # Apply type-based scoring (insights 2x, notes/session_summaries 1.5x, code 1x)
         if CONFIG.get("type_boost", True):
             type_multipliers = CONFIG.get("type_multipliers")
             ranked = apply_type_boost(ranked, multipliers=type_multipliers)
-            logger.debug("Type boost applied (insight=2x, note/commit=1.5x)")
+            logger.debug("Type boost applied (insight=2x, note/session_summary=1.5x)")
 
         # Apply recency boost to notes/commits (not code)
         if CONFIG["recency_boost"]:
@@ -428,7 +428,7 @@ class SearchPipeline:
                         result["verification_warning"] = warning
                     if staleness.get("verification_required"):
                         requires_verification = True
-            elif doc_type in ("note", "commit"):
+            elif doc_type in ("note", "session_summary"):
                 staleness = check_note_staleness(meta)
                 if staleness.get("verification_required") or staleness.get("level") != "fresh":
                     result["staleness"] = staleness
@@ -599,12 +599,12 @@ def search_cortex(
         initiative: Optional initiative ID or name to filter results
         include_completed: Include content from completed initiatives (default: True)
         types: Optional list of document types to include. Valid types:
-               skeleton, note, commit, insight, tech_stack, initiative,
+               skeleton, note, session_summary, insight, tech_stack, initiative,
                file_metadata, data_contract, entry_point, dependency.
                Example: ["note", "insight"] for understanding-only search.
         preset: Optional search preset. Overrides types if provided.
                Valid presets:
-               - "understanding": insights, notes, commits (why questions)
+               - "understanding": insights, notes, session_summaries (why questions)
                - "navigation": file_metadata, entry_points, data_contracts (where questions)
                - "structure": file_metadata, dependencies, skeleton
                - "trace": entry_points, dependencies, data_contracts (debugging)

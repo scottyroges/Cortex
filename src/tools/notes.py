@@ -1,7 +1,7 @@
 """
 Notes Tools
 
-MCP tools for saving notes and session commits.
+MCP tools for saving notes and session summaries.
 """
 
 import json
@@ -132,7 +132,7 @@ def save_note_to_cortex(
         })
 
 
-def commit_to_cortex(
+def session_summary_to_cortex(
     summary: str,
     changed_files: list[str],
     repository: Optional[str] = None,
@@ -154,17 +154,17 @@ def commit_to_cortex(
         initiative: Initiative ID/name to tag (uses focused initiative if not specified)
 
     Returns:
-        JSON with commit status and initiative info
+        JSON with session summary status and initiative info
     """
     repo = repository or "global"
 
-    logger.info(f"Committing to Cortex: {len(changed_files)} files, repository={repo}")
+    logger.info(f"Saving session summary to Cortex: {len(changed_files)} files, repository={repo}")
 
     try:
         collection = get_collection()
 
-        # Save the summary as a commit
-        note_id = f"commit:{uuid.uuid4().hex[:8]}"
+        # Save the session summary
+        doc_id = f"session_summary:{uuid.uuid4().hex[:8]}"
 
         repo_path = get_repo_path()
         branch = get_current_branch(repo_path) if repo_path else "unknown"
@@ -175,12 +175,12 @@ def commit_to_cortex(
             collection, repo, initiative, _get_focused_initiative_info
         )
 
-        # Get current commit for staleness tracking
+        # Get current git commit for staleness tracking
         current_commit = get_head_commit(repo_path) if repo_path else None
 
         # Build metadata
         metadata = {
-            "type": "commit",
+            "type": "session_summary",
             "repository": repo,
             "branch": branch,
             "files": json.dumps(changed_files),
@@ -189,7 +189,7 @@ def commit_to_cortex(
             "status": "active",
         }
 
-        # Add commit SHA if available (for staleness detection)
+        # Add git commit SHA if available (for staleness detection)
         if current_commit:
             metadata["created_commit"] = current_commit
 
@@ -202,21 +202,21 @@ def commit_to_cortex(
             _update_initiative_timestamp(collection, initiative_id, timestamp)
 
         collection.upsert(
-            ids=[note_id],
+            ids=[doc_id],
             documents=[f"Session Summary:\n\n{scrub_secrets(summary)}\n\nChanged files: {', '.join(changed_files)}"],
             metadatas=[metadata],
         )
-        logger.debug(f"Saved commit summary: {note_id}")
+        logger.debug(f"Saved session summary: {doc_id}")
 
         # Rebuild search index
         get_searcher().build_index()
 
-        logger.info(f"Commit complete: {note_id}")
+        logger.info(f"Session summary complete: {doc_id}")
 
         # Build response
         response = {
             "status": "success",
-            "commit_id": note_id,
+            "session_id": doc_id,
             "summary_saved": True,
             "files_recorded": len(changed_files),
         }
@@ -239,7 +239,7 @@ def commit_to_cortex(
         return json.dumps(response, indent=2)
 
     except Exception as e:
-        logger.error(f"Commit error: {e}")
+        logger.error(f"Session summary error: {e}")
         return json.dumps({
             "status": "error",
             "error": str(e),

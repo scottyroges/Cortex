@@ -63,7 +63,7 @@ MCP_TOOL_SCHEMAS = [
                 "types": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Filter by document types. Valid: skeleton, note, commit, insight, tech_stack, initiative, file_metadata, data_contract, entry_point, dependency. Example: ['note', 'insight'] for understanding-only search.",
+                    "description": "Filter by document types. Valid: skeleton, note, session_summary, insight, tech_stack, initiative, file_metadata, data_contract, entry_point, dependency. Example: ['note', 'insight'] for understanding-only search.",
                 },
             },
             "required": ["query"],
@@ -93,7 +93,7 @@ MCP_TOOL_SCHEMAS = [
         },
     },
     {
-        "name": "commit_to_cortex",
+        "name": "session_summary_to_cortex",
         "description": "Save a session summary and re-index changed files. IMPORTANT: Write a comprehensive summary that captures the FULL context of this session, including: (1) What was implemented/changed and WHY, (2) Key architectural decisions made, (3) Problems encountered and how they were solved, (4) Non-obvious patterns or gotchas discovered, (5) Future work or TODOs identified. This summary will be retrieved in future sessions to restore context, so include enough detail to resume this work months later.",
         "inputSchema": {
             "type": "object",
@@ -179,7 +179,7 @@ MCP_TOOL_SCHEMAS = [
     },
     {
         "name": "create_initiative",
-        "description": "Create a new initiative for a repository. Initiatives track multi-session work like epics, migrations, or features. New commits and notes are automatically tagged with the focused initiative.",
+        "description": "Create a new initiative for a repository. Initiatives track multi-session work like epics, migrations, or features. New session summaries and notes are automatically tagged with the focused initiative.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -226,7 +226,7 @@ MCP_TOOL_SCHEMAS = [
     },
     {
         "name": "focus_initiative",
-        "description": "Set focus to an initiative. New commits and notes will be tagged with this initiative.",
+        "description": "Set focus to an initiative. New session summaries and notes will be tagged with this initiative.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -244,7 +244,7 @@ MCP_TOOL_SCHEMAS = [
     },
     {
         "name": "complete_initiative",
-        "description": "Mark an initiative as completed with a summary. The initiative and its associated commits/notes remain searchable but with recency decay.",
+        "description": "Mark an initiative as completed with a summary. The initiative and its associated session summaries/notes remain searchable but with recency decay.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -289,7 +289,7 @@ MCP_TOOL_SCHEMAS = [
                 "top_k_retrieve": {"type": "integer", "description": "Candidates before reranking"},
                 "top_k_rerank": {"type": "integer", "description": "Results after reranking"},
                 "llm_provider": {"type": "string", "description": "LLM provider: anthropic, claude-cli, ollama, openrouter, or none"},
-                "recency_boost": {"type": "boolean", "description": "Enable recency boosting for notes/commits"},
+                "recency_boost": {"type": "boolean", "description": "Enable recency boosting for notes/session_summaries"},
                 "recency_half_life_days": {"type": "number", "description": "Days until recency boost decays to ~0.5"},
                 "enabled": {"type": "boolean", "description": "Enable or disable Cortex memory system"},
             },
@@ -320,7 +320,7 @@ MCP_TOOL_SCHEMAS = [
     },
     {
         "name": "recall_recent_work",
-        "description": "Recall recent commits and notes for a repository. Returns a timeline view of recent work, grouped by day, with initiative context. Answers 'What did I work on this week?' without manual search queries.",
+        "description": "Recall recent session summaries and notes for a repository. Returns a timeline view of recent work, grouped by day, with initiative context. Answers 'What did I work on this week?' without manual search queries.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -341,7 +341,7 @@ MCP_TOOL_SCHEMAS = [
                 "include_code": {
                     "type": "boolean",
                     "default": False,
-                    "description": "Include code changes in results (default: false, notes/commits only)",
+                    "description": "Include code changes in results (default: false, notes/session_summaries only)",
                 },
             },
             "required": ["repository"],
@@ -349,7 +349,7 @@ MCP_TOOL_SCHEMAS = [
     },
     {
         "name": "summarize_initiative",
-        "description": "Generate a narrative summary of an initiative's progress. Gathers all commits and notes tagged with the initiative and synthesizes a timeline with key decisions, problems solved, and current state.",
+        "description": "Generate a narrative summary of an initiative's progress. Gathers all session summaries and notes tagged with the initiative and synthesizes a timeline with key decisions, problems solved, and current state.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -453,7 +453,7 @@ MCP_TOOL_SCHEMAS = [
 def _get_tool_map():
     """Lazy import of tool functions to avoid circular imports."""
     from src.tools import (
-        commit_to_cortex,
+        session_summary_to_cortex,
         complete_initiative,
         configure_cortex,
         create_initiative,
@@ -481,7 +481,7 @@ def _get_tool_map():
         "orient_session": orient_session,
         "search_cortex": search_cortex,
         "ingest_code_into_cortex": ingest_code_into_cortex,
-        "commit_to_cortex": commit_to_cortex,
+        "session_summary_to_cortex": session_summary_to_cortex,
         "save_note_to_cortex": save_note_to_cortex,
         "insight_to_cortex": insight_to_cortex,
         "set_repo_context": set_repo_context,

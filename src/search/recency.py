@@ -1,7 +1,7 @@
 """
 Recency Boosting
 
-Apply time-based boosting to favor newer notes and commits.
+Apply time-based boosting to favor newer notes and session summaries.
 """
 
 import math
@@ -20,14 +20,14 @@ def apply_recency_boost(
 
     Uses exponential decay: boost = max(min_boost, e^(-age_days / half_life))
 
-    Only applies to document types in boost_types (defaults to notes/commits).
+    Only applies to document types in boost_types (defaults to notes/session_summaries).
     Code chunks are NOT boosted - old code is not less relevant.
 
     Args:
         results: List of reranked results with 'rerank_score' and 'meta'
         half_life_days: Days until boost decays to ~0.5 (default 30)
         min_boost: Minimum boost factor to prevent old docs from disappearing (default 0.5)
-        boost_types: Document types to boost (default: {"note", "commit"})
+        boost_types: Document types to boost (default: {"note", "session_summary"})
 
     Returns:
         Results with adjusted scores, re-sorted by boosted score
@@ -36,7 +36,7 @@ def apply_recency_boost(
         return results
 
     if boost_types is None:
-        boost_types = {"note", "commit"}
+        boost_types = {"note", "session_summary"}
 
     now = datetime.now(timezone.utc)
     boosted_results = []

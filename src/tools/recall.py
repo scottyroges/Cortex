@@ -24,7 +24,7 @@ def recall_recent_work(
     include_code: bool = False,
 ) -> str:
     """
-    Recall recent commits and notes for a repository.
+    Recall recent session summaries and notes for a repository.
 
     Returns a timeline view of recent work, grouped by day, with initiative context.
     Answers "What did I work on this week?" without manual search queries.
@@ -33,7 +33,7 @@ def recall_recent_work(
         repository: Repository identifier
         days: Number of days to look back (default: 7)
         limit: Maximum number of items to return (default: 20)
-        include_code: Include code changes in results (default: False, notes/commits only)
+        include_code: Include code changes in results (default: False, notes/session_summaries only)
 
     Returns:
         JSON with timeline of recent work grouped by day
@@ -51,7 +51,7 @@ def recall_recent_work(
         cutoff_str = cutoff.isoformat()
 
         # Build type filter
-        types_to_include = ["commit", "note"]
+        types_to_include = ["session_summary", "note"]
         if include_code:
             types_to_include.append("code")
 
@@ -166,7 +166,7 @@ def summarize_initiative(
     """
     Generate a narrative summary of an initiative's progress.
 
-    Gathers all commits and notes tagged with the initiative and synthesizes
+    Gathers all session summaries and notes tagged with the initiative and synthesizes
     a timeline with key decisions, problems solved, and current state.
 
     Args:
@@ -195,12 +195,12 @@ def summarize_initiative(
         init_meta = init_data["metadata"]
         repo = init_meta.get("repository", repository)
 
-        # Get all commits and notes for this initiative
+        # Get all session summaries and notes for this initiative
         results = collection.get(
             where={
                 "$and": [
                     {"initiative_id": initiative_id},
-                    {"type": {"$in": ["commit", "note"]}},
+                    {"type": {"$in": ["session_summary", "note"]}},
                 ]
             },
             include=["documents", "metadatas"],
@@ -229,12 +229,12 @@ def summarize_initiative(
         # Build timeline with phases
         timeline = []
         all_files = set()
-        commit_count = 0
+        session_count = 0
         note_count = 0
 
         for item in items:
-            if item["type"] == "commit":
-                commit_count += 1
+            if item["type"] == "session_summary":
+                session_count += 1
                 all_files.update(item.get("files", []))
             else:
                 note_count += 1
@@ -263,7 +263,7 @@ def summarize_initiative(
             duration = calculate_duration_from_now(created_at)
 
         # Build narrative summary
-        narrative = _build_narrative(init_meta, items, commit_count, note_count)
+        narrative = _build_narrative(init_meta, items, session_count, note_count)
 
         response = {
             "initiative": {
@@ -274,7 +274,7 @@ def summarize_initiative(
                 "repository": repo,
             },
             "stats": {
-                "commits": commit_count,
+                "session_summaries": session_count,
                 "notes": note_count,
                 "files_touched": len(all_files),
                 "duration": duration,
@@ -287,7 +287,7 @@ def summarize_initiative(
             response["initiative"]["completed_at"] = init_meta.get("completed_at", "")
             response["initiative"]["completion_summary"] = init_meta.get("completion_summary", "")
 
-        logger.info(f"Summarized initiative: {commit_count} commits, {note_count} notes")
+        logger.info(f"Summarized initiative: {session_count} session summaries, {note_count} notes")
         return json.dumps(response, indent=2)
 
     except Exception as e:
@@ -295,7 +295,7 @@ def summarize_initiative(
         return json.dumps({"status": "error", "error": str(e)})
 
 
-def _build_narrative(meta: dict, items: list, commit_count: int, note_count: int) -> str:
+def _build_narrative(meta: dict, items: list, session_count: int, note_count: int) -> str:
     """Build a narrative summary of the initiative."""
     name = meta.get("name", "This initiative")
     goal = meta.get("goal", "")
@@ -310,10 +310,10 @@ def _build_narrative(meta: dict, items: list, commit_count: int, note_count: int
         parts.append(f"**{name}**")
 
     # Activity summary
-    if commit_count > 0 or note_count > 0:
+    if session_count > 0 or note_count > 0:
         activity = []
-        if commit_count > 0:
-            activity.append(f"{commit_count} session commit{'s' if commit_count != 1 else ''}")
+        if session_count > 0:
+            activity.append(f"{session_count} session summar{'ies' if session_count != 1 else 'y'}")
         if note_count > 0:
             activity.append(f"{note_count} note{'s' if note_count != 1 else ''}")
         parts.append(f"Activity: {' and '.join(activity)} recorded.")

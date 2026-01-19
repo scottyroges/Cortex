@@ -324,16 +324,16 @@ class RepositoryContext:
         return []
 
     def fetch_recent_work(self, days: int = 7, limit: int = 5) -> list[str]:
-        """Fetch brief highlights of recent work (commits/notes)."""
+        """Fetch brief highlights of recent work (session summaries/notes)."""
         try:
             cutoff = datetime.now(timezone.utc) - timedelta(days=days)
 
-            # Query recent commits and notes
+            # Query recent session summaries and notes
             results = self.collection.get(
                 where={
                     "$and": [
                         {"repository": self.repo_name},
-                        {"type": {"$in": ["commit", "note"]}},
+                        {"type": {"$in": ["session_summary", "note"]}},
                     ]
                 },
                 include=["documents", "metadatas"],

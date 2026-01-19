@@ -135,8 +135,8 @@ Cortex fills this gap by storing:
 
 | Feature | Description | Value |
 |---------|-------------|-------|
-| **Type-Based Scoring** | Boost insights (2x), notes (1.5x), commits (1.5x) over code chunks. Implemented in `src/search/type_scoring.py`. | Understanding surfaces before implementation |
-| **Document Type Filter** | `types` parameter on `search_cortex` filters by document type (note, insight, commit, code, skeleton, tech_stack, initiative). Branch filtering applies only to code/skeleton. | Skip code noise for "why" questions |
+| **Type-Based Scoring** | Boost insights (2x), notes (1.5x), session_summaries (1.5x) over code chunks. Implemented in `src/search/type_scoring.py`. | Understanding surfaces before implementation |
+| **Document Type Filter** | `types` parameter on `search_cortex` filters by document type (note, insight, session_summary, code, skeleton, tech_stack, initiative). Branch filtering applies only to code/skeleton. | Skip code noise for "why" questions |
 | **Conditional Index Rebuild** | BM25 index cached and only rebuilt when collection changes. Added thread-safety with `RLock`, `invalidate()` method. ~3s faster per search when warm. | Performance optimization |
 
 ### High Priority

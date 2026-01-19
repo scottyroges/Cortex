@@ -17,7 +17,7 @@ from src.tools.initiatives import (
     focus_initiative,
     list_initiatives,
 )
-from src.tools.notes import commit_to_cortex, insight_to_cortex, save_note_to_cortex, validate_insight
+from src.tools.notes import session_summary_to_cortex, insight_to_cortex, save_note_to_cortex, validate_insight
 from src.tools.orient import orient_session
 from src.tools.recall import recall_recent_work, summarize_initiative
 from src.tools.search import search_cortex
@@ -31,7 +31,7 @@ __all__ = [
     "ingest_code_into_cortex",
     # Notes
     "save_note_to_cortex",
-    "commit_to_cortex",
+    "session_summary_to_cortex",
     "insight_to_cortex",
     "validate_insight",
     # Context

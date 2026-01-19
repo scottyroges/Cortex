@@ -150,7 +150,7 @@ Different queries need different document types:
 ```python
 SEARCH_PRESETS = {
     # "Why did we do X?" - understanding queries
-    "understanding": ["insight", "note", "commit"],
+    "understanding": ["insight", "note", "session_summary"],
 
     # "Where is X?" - navigation queries
     "navigation": ["file_metadata", "entry_point", "data_contract"],
@@ -174,7 +174,7 @@ TYPE_MULTIPLIERS = {
     # Understanding (irreplaceable - grep can't find this)
     "insight": 2.0,
     "note": 1.5,
-    "commit": 1.5,
+    "session_summary": 1.5,
 
     # Navigation (high value - tells agent where to look)
     "entry_point": 1.4,

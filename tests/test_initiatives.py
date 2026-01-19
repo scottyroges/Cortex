@@ -294,15 +294,15 @@ class TestStalenessDetection:
 
 
 class TestInitiativeTagging:
-    """Tests for tagging commits/notes with initiatives."""
+    """Tests for tagging session summaries/notes with initiatives."""
 
-    def test_commit_tagged_with_focused_initiative(self, temp_chroma_client):
-        """Test that commits are tagged with focused initiative."""
+    def test_session_summary_tagged_with_focused_initiative(self, temp_chroma_client):
+        """Test that session summaries are tagged with focused initiative."""
         from src.tools.initiatives import create_initiative
-        from src.tools.notes import commit_to_cortex
+        from src.tools.notes import session_summary_to_cortex
 
         reset_services()
-        collection = get_or_create_collection(temp_chroma_client, "test_commit_tag")
+        collection = get_or_create_collection(temp_chroma_client, "test_session_tag")
         set_collection(collection)
 
         with patch("src.git.get_current_branch", return_value="main"):
@@ -315,9 +315,9 @@ class TestInitiativeTagging:
                 ))
                 init_id = create_result["initiative_id"]
 
-                # Create a commit
-                result = json.loads(commit_to_cortex(
-                    summary="Test commit",
+                # Create a session summary
+                result = json.loads(session_summary_to_cortex(
+                    summary="Test session summary",
                     changed_files=[],
                     repository="TestRepo",
                 ))
@@ -354,13 +354,13 @@ class TestInitiativeTagging:
                 assert result["status"] == "saved"
                 assert result["initiative"]["id"] == init_id
 
-    def test_commit_completion_signal_detected(self, temp_chroma_client):
-        """Test that completion signals are detected in commits."""
+    def test_session_summary_completion_signal_detected(self, temp_chroma_client):
+        """Test that completion signals are detected in session summaries."""
         from src.tools.initiatives import create_initiative
-        from src.tools.notes import commit_to_cortex
+        from src.tools.notes import session_summary_to_cortex
 
         reset_services()
-        collection = get_or_create_collection(temp_chroma_client, "test_commit_signal")
+        collection = get_or_create_collection(temp_chroma_client, "test_session_signal")
         set_collection(collection)
 
         with patch("src.git.get_current_branch", return_value="main"):
@@ -368,7 +368,7 @@ class TestInitiativeTagging:
 
                 create_initiative(repository="TestRepo", name="Feature")
 
-                result = json.loads(commit_to_cortex(
+                result = json.loads(session_summary_to_cortex(
                     summary="Feature implementation complete. All tests passing.",
                     changed_files=[],
                     repository="TestRepo",

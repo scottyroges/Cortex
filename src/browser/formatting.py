@@ -186,7 +186,7 @@ def format_metadata(meta: dict[str, Any], doc_type: str) -> dict[str, str]:
         if meta.get("initiative_name"):
             formatted["Initiative"] = meta["initiative_name"]
 
-    elif doc_type == "commit":
+    elif doc_type == "session_summary":
         if meta.get("files"):
             files = format_files(meta["files"])
             if files:

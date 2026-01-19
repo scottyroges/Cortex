@@ -496,16 +496,16 @@ class TestBrowseUpdateEndpoint:
         assert response.status_code == 400
         assert "not editable" in response.json()["detail"]
 
-    def test_update_commit_content(self, browse_client, temp_chroma_client):
-        """Test updating a commit's content."""
+    def test_update_session_summary_content(self, browse_client, temp_chroma_client):
+        """Test updating a session summary's content."""
         from src.storage import get_or_create_collection
 
         collection = get_or_create_collection(temp_chroma_client, "cortex_memory")
         collection.add(
-            documents=["Original commit summary"],
-            ids=["commit_001"],
+            documents=["Original session summary"],
+            ids=["session_001"],
             metadatas=[{
-                "type": "commit",
+                "type": "session_summary",
                 "repository": "test",
                 "branch": "main",
                 "files": '["file1.py"]',
@@ -514,33 +514,33 @@ class TestBrowseUpdateEndpoint:
 
         response = browse_client.put(
             "/browse/update",
-            params={"id": "commit_001"},
-            json={"content": "Updated commit summary with more details"}
+            params={"id": "session_001"},
+            json={"content": "Updated session summary with more details"}
         )
 
         assert response.status_code == 200
         assert "content" in response.json()["updated_fields"]
 
-    def test_update_commit_title_not_allowed(self, browse_client, temp_chroma_client):
-        """Test that commits cannot have their title updated (not an editable field)."""
+    def test_update_session_summary_title_not_allowed(self, browse_client, temp_chroma_client):
+        """Test that session summaries cannot have their title updated (not an editable field)."""
         from src.storage import get_or_create_collection
 
         collection = get_or_create_collection(temp_chroma_client, "cortex_memory")
         collection.add(
-            documents=["Commit summary"],
-            ids=["commit_002"],
+            documents=["Session summary"],
+            ids=["session_002"],
             metadatas=[{
-                "type": "commit",
+                "type": "session_summary",
                 "repository": "test",
                 "branch": "main",
                 "files": "[]",
             }],
         )
 
-        # Title is not editable for commits - should return 400 with no valid fields
+        # Title is not editable for session summaries - should return 400 with no valid fields
         response = browse_client.put(
             "/browse/update",
-            params={"id": "commit_002"},
+            params={"id": "session_002"},
             json={"title": "New Title"}
         )
 
@@ -629,27 +629,27 @@ class TestBrowseDeleteEndpoint:
 
         assert response.status_code == 404
 
-    def test_delete_commit(self, browse_client, temp_chroma_client):
-        """Test deleting a commit."""
+    def test_delete_session_summary(self, browse_client, temp_chroma_client):
+        """Test deleting a session summary."""
         from src.storage import get_or_create_collection
 
         collection = get_or_create_collection(temp_chroma_client, "cortex_memory")
         collection.add(
             documents=["Session summary to delete"],
-            ids=["commit_to_delete"],
+            ids=["session_to_delete"],
             metadatas=[{
-                "type": "commit",
+                "type": "session_summary",
                 "repository": "test",
                 "branch": "main",
                 "files": '["file.py"]',
             }],
         )
 
-        response = browse_client.delete("/browse/delete", params={"id": "commit_to_delete"})
+        response = browse_client.delete("/browse/delete", params={"id": "session_to_delete"})
 
         assert response.status_code == 200
         assert response.json()["success"] is True
 
         # Verify deletion
-        result = collection.get(ids=["commit_to_delete"])
+        result = collection.get(ids=["session_to_delete"])
         assert len(result["ids"]) == 0

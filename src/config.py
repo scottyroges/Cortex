@@ -333,7 +333,7 @@ DEFAULT_CONFIG = {
     "type_multipliers": {
         "insight": 2.0,
         "note": 1.5,
-        "commit": 1.5,
+        "session_summary": 1.5,
         "entry_point": 1.4,
         "file_metadata": 1.3,
         "data_contract": 1.3,

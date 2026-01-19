@@ -126,7 +126,7 @@ class QueueProcessor:
         """
         from src.config import load_yaml_config
         from src.llm import get_provider
-        from src.tools.notes import commit_to_cortex
+        from src.tools.notes import session_summary_to_cortex
 
         session_id = session.get("session_id", "unknown")
         transcript_text = session.get("transcript_text", "")
@@ -156,15 +156,15 @@ class QueueProcessor:
 
         # Save to Cortex
         try:
-            result = commit_to_cortex(
+            result = session_summary_to_cortex(
                 summary=summary,
                 changed_files=files_edited,
                 repository=repository,
             )
-            logger.info(f"Saved session {session_id} to Cortex: {repository}")
+            logger.info(f"Saved session summary {session_id} to Cortex: {repository}")
             return True
         except Exception as e:
-            logger.error(f"Failed to save to Cortex: {e}")
+            logger.error(f"Failed to save session summary to Cortex: {e}")
             return False
 
 

@@ -16,7 +16,7 @@ from src.migrations.backup import backup_database, restore_database
 logger = get_logger("migrations")
 
 # Current schema version - increment when adding migrations
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 # Schema version file name
 SCHEMA_VERSION_FILE = "schema_version.json"
@@ -81,8 +81,9 @@ def get_migrations() -> list[tuple[int, str, Callable]]:
 
     return [
         (1, "Initial schema version tracking", m.migration_001_initial),
+        (2, "Rename 'commit' to 'session_summary'", m.migration_002_commit_to_session_summary),
         # Future migrations added here:
-        # (2, "Add insight staleness tracking", m.migration_002_insights),
+        # (3, "Add insight staleness tracking", m.migration_003_insights),
     ]
 
 

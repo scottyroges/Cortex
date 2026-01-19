@@ -822,9 +822,9 @@ class TestQueueProcessor:
 
     @patch("src.config.load_yaml_config")
     @patch("src.llm.get_provider")
-    @patch("src.tools.notes.commit_to_cortex")
+    @patch("src.tools.notes.session_summary_to_cortex")
     def test_process_session_success(
-        self, mock_commit, mock_get_provider, mock_load_config
+        self, mock_session_summary, mock_get_provider, mock_load_config
     ):
         """Session processing succeeds with mocked dependencies."""
         from src.autocapture.queue_processor import QueueProcessor
@@ -834,7 +834,7 @@ class TestQueueProcessor:
         mock_provider = MagicMock()
         mock_provider.summarize_session.return_value = "Test summary"
         mock_get_provider.return_value = mock_provider
-        mock_commit.return_value = "{}"
+        mock_session_summary.return_value = "{}"
 
         processor = QueueProcessor()
         session = {
@@ -848,7 +848,7 @@ class TestQueueProcessor:
 
         assert result is True
         mock_provider.summarize_session.assert_called_once()
-        mock_commit.assert_called_once()
+        mock_session_summary.assert_called_once()
 
     @patch("src.config.load_yaml_config")
     @patch("src.llm.get_provider")
@@ -1072,7 +1072,7 @@ class TestProcessSyncEndpoint:
     @patch("src.llm.get_provider")
     def test_process_sync_success(self, mock_get_provider, mock_load_config):
         """process_sync succeeds with mocked dependencies."""
-        from src.http.api import ProcessSyncRequest, process_sync, commit_session
+        from src.http.api import ProcessSyncRequest, process_sync, save_session_summary
 
         mock_load_config.return_value = {}
         mock_provider = MagicMock()
@@ -1086,19 +1086,19 @@ class TestProcessSyncEndpoint:
             repository="test-repo",
         )
 
-        # Mock commit_session at module level
+        # Mock save_session_summary at module level
         with patch.object(
-            __import__("src.http.api", fromlist=["commit_session"]),
-            "commit_session",
-            return_value={"status": "success", "commit_id": "test-commit"},
-        ) as mock_commit:
+            __import__("src.http.api", fromlist=["save_session_summary"]),
+            "save_session_summary",
+            return_value={"status": "success", "session_id": "test-session"},
+        ) as mock_save:
             result = process_sync(request)
 
             assert result["status"] == "success"
             assert result["session_id"] == "test-1"
             assert result["summary_length"] == len("Test summary")
             mock_provider.summarize_session.assert_called_once()
-            mock_commit.assert_called_once()
+            mock_save.assert_called_once()
 
     @patch("src.config.load_yaml_config")
     @patch("src.llm.get_provider")
