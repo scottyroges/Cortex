@@ -23,6 +23,7 @@ const confirmingDelete = ref(false)
 const saving = ref(false)
 const deleteError = ref<string | null>(null)
 const saveError = ref<string | null>(null)
+const showRaw = ref(false)
 
 // Edit form state
 const editTitle = ref('')
@@ -66,6 +67,7 @@ async function loadDocument(id: string) {
 watch(
   () => props.summary?.id,
   (id) => {
+    showRaw.value = false
     if (id) {
       loadDocument(id)
     } else {
@@ -243,6 +245,13 @@ function removeFile(file: string) {
           </div>
           <!-- Action buttons -->
           <div v-if="!editing && !confirmingDelete" class="flex gap-2">
+            <button
+              class="px-2 py-1 text-xs rounded transition-colors"
+              :class="showRaw ? 'bg-amber-600 hover:bg-amber-500 text-white' : 'bg-gray-600 hover:bg-gray-500 text-gray-200'"
+              @click="showRaw = !showRaw"
+            >
+              {{ showRaw ? 'Formatted' : 'Raw' }}
+            </button>
             <button
               v-if="isEditable"
               class="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors"
@@ -436,7 +445,10 @@ function removeFile(file: string) {
 
       <!-- View Mode -->
       <div v-else class="flex-1 overflow-auto p-4">
-        <pre class="text-sm text-gray-300 whitespace-pre-wrap font-mono leading-relaxed">{{ formatContent(document.content) }}</pre>
+        <!-- Raw JSON view -->
+        <pre v-if="showRaw" class="text-sm text-gray-300 whitespace-pre-wrap font-mono leading-relaxed">{{ JSON.stringify(document, null, 2) }}</pre>
+        <!-- Formatted content view -->
+        <pre v-else class="text-sm text-gray-300 whitespace-pre-wrap font-mono leading-relaxed">{{ formatContent(document.content) }}</pre>
       </div>
     </template>
   </div>
