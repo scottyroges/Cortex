@@ -18,10 +18,77 @@ from src.git import get_current_branch, get_git_changed_files, get_head_commit, 
 from src.ingest.skeleton import generate_tree_structure, store_skeleton
 from src.ingest.walker import compute_file_hash, get_changed_files, walk_codebase
 from src.llm import LLMProvider
-from src.state import load_state, migrate_state, save_state
-from src.storage.gc import cleanup_state_entries, delete_file_chunks
+from src.storage.gc import delete_file_chunks
 
 logger = get_logger("ingest.engine")
+
+
+# =============================================================================
+# DB State Helpers (replaces state file)
+# =============================================================================
+
+
+def get_indexed_commit_from_db(
+    collection: chromadb.Collection,
+    repo_id: str,
+    branch: str,
+) -> Optional[str]:
+    """
+    Get the indexed_commit from skeleton metadata.
+
+    Args:
+        collection: ChromaDB collection
+        repo_id: Repository identifier
+        branch: Git branch name
+
+    Returns:
+        Commit hash if found, None otherwise
+    """
+    skeleton_id = f"{repo_id}:skeleton:{branch}"
+    try:
+        result = collection.get(ids=[skeleton_id], include=["metadatas"])
+        if result["metadatas"]:
+            return result["metadatas"][0].get("indexed_commit")
+    except Exception as e:
+        logger.debug(f"Could not get indexed_commit from skeleton: {e}")
+    return None
+
+
+def get_file_hashes_from_db(
+    collection: chromadb.Collection,
+    repo_id: str,
+) -> dict[str, str]:
+    """
+    Load file hashes from file_metadata documents in ChromaDB.
+
+    Used for hash-based delta sync in non-git repos.
+
+    Args:
+        collection: ChromaDB collection
+        repo_id: Repository identifier
+
+    Returns:
+        Dict mapping file_path -> file_hash
+    """
+    try:
+        result = collection.get(
+            where={
+                "$and": [
+                    {"type": "file_metadata"},
+                    {"repository": repo_id},
+                ]
+            },
+            include=["metadatas"],
+        )
+        return {
+            meta["file_path"]: meta.get("file_hash", "")
+            for meta in result.get("metadatas", [])
+            if meta.get("file_path") and meta.get("file_hash")
+        }
+    except Exception as e:
+        logger.warning(f"Could not load file hashes from DB: {e}")
+        return {}
+
 
 # Progress callback: (files_processed, files_total, docs_created) -> None
 ProgressCallback = Callable[[int, int, int], None]
@@ -171,25 +238,44 @@ class HashDeltaSyncStrategy(DeltaSyncStrategy):
 
 def select_delta_strategy(
     root_path: str,
-    state: dict,
+    collection: chromadb.Collection,
+    repo_id: str,
+    branch: str,
     force_full: bool,
     include_patterns: Optional[list[str]],
     use_cortexignore: bool,
 ) -> DeltaSyncStrategy:
-    """Select the appropriate delta sync strategy."""
+    """Select the appropriate delta sync strategy.
+
+    Args:
+        root_path: Root directory path
+        collection: ChromaDB collection (for querying existing state)
+        repo_id: Repository identifier
+        branch: Git branch name
+        force_full: Force full re-ingestion
+        include_patterns: Glob patterns for selective ingestion
+        use_cortexignore: Use cortexignore files
+
+    Returns:
+        Appropriate delta sync strategy
+    """
     if force_full:
         return FullSyncStrategy(root_path, include_patterns, use_cortexignore)
 
     use_git = is_git_repo(root_path)
-    last_commit = state.get("indexed_commit") if use_git else None
     current_commit = get_head_commit(root_path) if use_git else None
 
-    if use_git and last_commit and current_commit:
-        return GitDeltaSyncStrategy(root_path, last_commit, include_patterns, use_cortexignore)
+    if use_git and current_commit:
+        # Get last indexed commit from skeleton metadata
+        last_commit = get_indexed_commit_from_db(collection, repo_id, branch)
+        if last_commit:
+            return GitDeltaSyncStrategy(root_path, last_commit, include_patterns, use_cortexignore)
 
+    # Fall back to hash-based delta for non-git or first-time indexing
+    file_hashes = get_file_hashes_from_db(collection, repo_id)
     return HashDeltaSyncStrategy(
         root_path,
-        state.get("file_hashes", {}),
+        file_hashes,
         include_patterns,
         use_cortexignore,
     )
@@ -203,10 +289,9 @@ def select_delta_strategy(
 class GarbageCollector:
     """Handles cleanup of deleted and renamed file chunks."""
 
-    def __init__(self, collection: chromadb.Collection, repo_id: str, state: dict):
+    def __init__(self, collection: chromadb.Collection, repo_id: str):
         self.collection = collection
         self.repo_id = repo_id
-        self.state = state
 
     def cleanup_deleted(self, deleted_files: list[str]) -> int:
         """Remove chunks for deleted files."""
@@ -214,7 +299,6 @@ class GarbageCollector:
             return 0
 
         chunks_deleted = delete_file_chunks(self.collection, deleted_files, self.repo_id)
-        cleanup_state_entries(self.state, deleted_files)
         logger.info(f"Garbage collected: {len(deleted_files)} files, {chunks_deleted} chunks")
         return chunks_deleted
 
@@ -225,7 +309,6 @@ class GarbageCollector:
 
         old_paths = [old for old, new in renamed_files]
         chunks_deleted = delete_file_chunks(self.collection, old_paths, self.repo_id)
-        cleanup_state_entries(self.state, old_paths)
         logger.info(f"Cleaned up {len(renamed_files)} renamed files")
         return chunks_deleted
 
@@ -366,7 +449,6 @@ def ingest_codebase(
     collection: chromadb.Collection,
     repo_id: Optional[str] = None,
     force_full: bool = False,
-    state_file: Optional[str] = None,
     include_patterns: Optional[list[str]] = None,
     use_cortexignore: bool = True,
     llm_provider_instance: Optional[LLMProvider] = None,
@@ -380,18 +462,17 @@ def ingest_codebase(
     code says.
 
     Uses git-based delta sync when available:
-    - Only processes files changed since last indexed commit
+    - Only processes files changed since last indexed commit (stored in skeleton metadata)
     - Garbage collects documents for deleted files
     - Handles file renames (deletes old path, indexes new path)
 
-    Falls back to MD5 hash-based delta sync for non-git repos.
+    Falls back to MD5 hash-based delta sync for non-git repos (queries file_metadata for hashes).
 
     Args:
         root_path: Root directory to ingest
         collection: ChromaDB collection to add documents to
         repo_id: Repository identifier (defaults to directory name)
         force_full: Force full re-ingestion (ignore delta sync)
-        state_file: Path to state file for delta sync
         include_patterns: If provided, only files matching at least one glob pattern are indexed.
                           Patterns are relative to root_path (e.g., ["src/**", "tests/**"])
         use_cortexignore: If True, load patterns from global + project cortexignore files
@@ -408,13 +489,9 @@ def ingest_codebase(
 
     logger.info(f"Starting ingestion: {root_path} (repository={repo_id}, branch={branch})")
 
-    # Load and migrate state for delta sync
-    raw_state = {} if force_full else load_state(state_file)
-    state = migrate_state(raw_state)
-
-    # Select and execute delta sync strategy
+    # Select and execute delta sync strategy (queries DB for state)
     strategy = select_delta_strategy(
-        root_path, state, force_full, include_patterns, use_cortexignore
+        root_path, collection, repo_id, branch, force_full, include_patterns, use_cortexignore
     )
     delta_result = strategy.get_files_to_process()
 
@@ -433,12 +510,14 @@ def ingest_codebase(
     }
 
     # Garbage collection
-    gc = GarbageCollector(collection, repo_id, state)
+    gc = GarbageCollector(collection, repo_id)
     stats["chunks_deleted"] += gc.cleanup_deleted(delta_result.deleted_files)
     stats["chunks_deleted"] += gc.cleanup_renamed(delta_result.renamed_files)
 
     # Process files using metadata-first approach
-    file_hashes = state.get("file_hashes", {})
+    # Note: file_hashes dict is only used during processing to track new hashes
+    # Hashes are stored in file_metadata docs in ChromaDB
+    file_hashes: dict[str, str] = {}
 
     processor = MetadataFileProcessor(
         collection, repo_id, branch, root, llm_provider_instance
@@ -453,23 +532,17 @@ def ingest_codebase(
     stats["docs_created"] = docs_created
     stats["errors"] = errors
 
-    # Update state
+    # Get current commit for skeleton metadata (used for git delta sync)
     current_commit = get_head_commit(root_path) if is_git_repo(root_path) else None
-    state["file_hashes"] = file_hashes
-    state["indexed_commit"] = current_commit
-    state["indexed_at"] = datetime.now(timezone.utc).isoformat()
-    state["repository"] = repo_id
-    state["branch"] = branch
-    save_state(state, state_file)
 
-    # Generate and store skeleton
+    # Generate and store skeleton with indexed_commit
     try:
         tree_output, tree_stats = generate_tree_structure(
             root_path,
             include_patterns=include_patterns,
             use_cortexignore=use_cortexignore,
         )
-        store_skeleton(collection, tree_output, repo_id, branch, tree_stats)
+        store_skeleton(collection, tree_output, repo_id, branch, tree_stats, indexed_commit=current_commit)
         stats["skeleton"] = tree_stats
         logger.info(f"Skeleton indexed: {tree_stats['total_files']} files, {tree_stats['total_dirs']} dirs")
     except Exception as e:

@@ -20,9 +20,7 @@ from src.ingest import (
     walk_codebase,
 )
 from src.ingest.skeleton import _analyze_tree, _generate_tree_fallback
-from src.state import load_state, save_state
 from src.storage import delete_file_chunks, get_or_create_collection
-from src.storage.gc import cleanup_state_entries
 
 
 class TestFileWalking:
@@ -154,23 +152,6 @@ class TestDeltaSync:
         assert "file2.py" in changed_names
         assert "file1.py" not in changed_names
 
-    def test_state_persistence(self, temp_dir: Path):
-        """Test state save and load."""
-        state_file = temp_dir / "state.json"
-        state = {"file1.py": "abc123", "file2.py": "def456"}
-
-        save_state(state, str(state_file))
-        loaded = load_state(str(state_file))
-
-        assert loaded == state
-
-    def test_load_missing_state(self, temp_dir: Path):
-        """Test loading non-existent state file."""
-        state_file = temp_dir / "nonexistent.json"
-        loaded = load_state(str(state_file))
-        assert loaded == {}
-
-
 class TestIngestion:
     """Tests for metadata-first file ingestion."""
 
@@ -185,13 +166,12 @@ class TestIngestion:
         collection = get_or_create_collection(temp_chroma_client, "test_codebase")
 
         # Use a state file path that doesn't exist yet
-        state_file = str(temp_dir / "ingest_state.json")
 
         stats = ingest_codebase(
             root_path=str(temp_dir),
             collection=collection,
             repo_id="myproject",
-            state_file=state_file,
+            
         )
 
         assert stats["files_scanned"] == 2
@@ -212,13 +192,12 @@ class TestIngestion:
         collection = get_or_create_collection(temp_chroma_client, "test_delta")
 
         # Use a state file outside the code directory
-        state_file = str(temp_dir / "ingest_state.json")
 
         # First ingestion
         stats1 = ingest_codebase(
             root_path=str(code_dir),
             collection=collection,
-            state_file=state_file,
+            
         )
         assert stats1["files_processed"] == 1
 
@@ -226,7 +205,7 @@ class TestIngestion:
         stats2 = ingest_codebase(
             root_path=str(code_dir),
             collection=collection,
-            state_file=state_file,
+            
         )
         # No files should be processed (unchanged)
         assert stats2["files_processed"] == 0
@@ -238,7 +217,7 @@ class TestIngestion:
         stats3 = ingest_codebase(
             root_path=str(code_dir),
             collection=collection,
-            state_file=state_file,
+            
         )
         assert stats3["files_processed"] == 1
 
@@ -254,20 +233,19 @@ class TestIngestion:
         collection = get_or_create_collection(temp_chroma_client, "test_force")
 
         # Use a state file outside the code directory
-        state_file = str(temp_dir / "ingest_state.json")
 
         # First ingestion
         ingest_codebase(
             root_path=str(code_dir),
             collection=collection,
-            state_file=state_file,
+            
         )
 
         # Force full re-ingestion
         stats = ingest_codebase(
             root_path=str(code_dir),
             collection=collection,
-            state_file=state_file,
+            
             force_full=True,
         )
 
@@ -414,13 +392,12 @@ class TestSkeleton:
         collection = get_or_create_collection(temp_chroma_client, "test_skel_ingest")
 
         # Use a state file path that doesn't exist yet
-        state_file = str(temp_dir / "ingest_state.json")
 
         stats = ingest_codebase(
             root_path=str(temp_dir),
             collection=collection,
             repo_id="myproject",
-            state_file=state_file,
+            
         )
 
         # Check skeleton was created
@@ -698,120 +675,6 @@ class TestGarbageCollection:
 
         assert deleted == 0
 
-    def test_cleanup_state_entries(self):
-        """Test cleaning up state entries for deleted files."""
-        state = {
-            "file_hashes": {
-                "/path/to/file1.py": "hash1",
-                "/path/to/file2.py": "hash2",
-                "/path/to/file3.py": "hash3",
-            },
-            "indexed_commit": "abc123",
-        }
-
-        cleanup_state_entries(state, ["/path/to/file1.py", "/path/to/file3.py"])
-
-        assert "/path/to/file1.py" not in state["file_hashes"]
-        assert "/path/to/file2.py" in state["file_hashes"]
-        assert "/path/to/file3.py" not in state["file_hashes"]
-
-
-class TestStateFormat:
-    """Tests for state format migration and handling."""
-
-    def test_state_migration_old_to_new(self, temp_dir: Path, temp_chroma_client):
-        """Test that old state format is migrated to new format."""
-        from src.storage import get_or_create_collection
-
-        # Create old-format state file
-        state_file = temp_dir / "state.json"
-        old_state = {
-            "/path/to/file1.py": "hash1",
-            "/path/to/file2.py": "hash2",
-        }
-        state_file.write_text(json.dumps(old_state))
-
-        # Create a code directory
-        code_dir = temp_dir / "code"
-        code_dir.mkdir()
-        (code_dir / "main.py").write_text("def main(): pass")
-
-        collection = get_or_create_collection(temp_chroma_client, "test_migrate")
-
-        # Run ingestion
-        ingest_codebase(
-            root_path=str(code_dir),
-            collection=collection,
-            state_file=str(state_file),
-        )
-
-        # Load updated state
-        new_state = load_state(str(state_file))
-
-        # Verify new format
-        assert "file_hashes" in new_state
-        assert "indexed_at" in new_state
-        assert "repository" in new_state
-
-    def test_atomic_state_write(self, temp_dir: Path):
-        """Test that state writes are atomic."""
-        state_file = temp_dir / "state.json"
-        state = {
-            "file_hashes": {"file.py": "hash"},
-            "indexed_commit": "abc123",
-            "indexed_at": "2024-01-01T00:00:00Z",
-        }
-
-        save_state(state, str(state_file))
-
-        # Verify file exists and is valid JSON
-        loaded = load_state(str(state_file))
-        assert loaded == state
-
-    def test_ingest_reports_delta_mode(self, temp_dir: Path, temp_chroma_client):
-        """Test that ingestion reports which delta mode was used."""
-        from src.storage import get_or_create_collection
-
-        code_dir = temp_dir / "code"
-        code_dir.mkdir()
-        (code_dir / "main.py").write_text("def main(): pass")
-
-        collection = get_or_create_collection(temp_chroma_client, "test_mode")
-        state_file = str(temp_dir / "state.json")
-
-        # First run should use hash mode (first index of non-git dir)
-        stats = ingest_codebase(
-            root_path=str(code_dir),
-            collection=collection,
-            state_file=state_file,
-        )
-
-        assert "delta_mode" in stats
-        # Non-git dir on first run uses hash-based
-        assert stats["delta_mode"] in ("hash", "full")
-
-    def test_ingest_tracks_deleted_stats(self, temp_dir: Path, temp_chroma_client):
-        """Test that ingestion tracks deletion stats."""
-        from src.storage import get_or_create_collection
-
-        code_dir = temp_dir / "code"
-        code_dir.mkdir()
-        (code_dir / "main.py").write_text("def main(): pass")
-
-        collection = get_or_create_collection(temp_chroma_client, "test_del_stats")
-        state_file = str(temp_dir / "state.json")
-
-        stats = ingest_codebase(
-            root_path=str(code_dir),
-            collection=collection,
-            state_file=state_file,
-        )
-
-        assert "files_deleted" in stats
-        assert "chunks_deleted" in stats
-        assert stats["files_deleted"] == 0  # No deletions on first run
-
-
 class TestSelectiveIngestion:
     """Tests for selective ingestion with include_patterns and cortexignore."""
 
@@ -974,13 +837,12 @@ generated.py
 
         collection = get_or_create_collection(temp_chroma_client, "test_include")
         code_dir = temp_dir / "code"
-        state_file = str(temp_dir / "state.json")
 
         stats = ingest_codebase(
             root_path=str(code_dir),
             collection=collection,
             repo_id="test",
-            state_file=state_file,
+            
             include_patterns=["src/**"],
         )
 
@@ -1036,13 +898,12 @@ class UserService:
 ''')
 
         collection = get_or_create_collection(temp_chroma_client, "test_metadata")
-        state_file = str(temp_dir / "state.json")
 
         stats = ingest_codebase(
             root_path=str(temp_dir),
             collection=collection,
             repo_id="test",
-            state_file=state_file,
+            
         )
 
         assert stats["files_processed"] >= 1
@@ -1078,13 +939,12 @@ class User:
 ''')
 
         collection = get_or_create_collection(temp_chroma_client, "test_contracts")
-        state_file = str(temp_dir / "state.json")
 
         stats = ingest_codebase(
             root_path=str(temp_dir),
             collection=collection,
             repo_id="test",
-            state_file=state_file,
+            
         )
 
         # Verify data_contract document was created
@@ -1117,13 +977,12 @@ if __name__ == "__main__":
 ''')
 
         collection = get_or_create_collection(temp_chroma_client, "test_entry")
-        state_file = str(temp_dir / "state.json")
 
         stats = ingest_codebase(
             root_path=str(temp_dir),
             collection=collection,
             repo_id="test",
-            state_file=state_file,
+            
         )
 
         # Verify entry_point document was created
@@ -1161,13 +1020,12 @@ class UserService:
 ''')
 
         collection = get_or_create_collection(temp_chroma_client, "test_deps")
-        state_file = str(temp_dir / "state.json")
 
         stats = ingest_codebase(
             root_path=str(src_dir),
             collection=collection,
             repo_id="test",
-            state_file=state_file,
+            
         )
 
         # Verify dependency documents were created
@@ -1189,13 +1047,12 @@ def hello():
 ''')
 
         collection = get_or_create_collection(temp_chroma_client, "test_no_chunks")
-        state_file = str(temp_dir / "state.json")
 
         ingest_codebase(
             root_path=str(temp_dir),
             collection=collection,
             repo_id="test",
-            state_file=state_file,
+            
         )
 
         # Verify NO code chunks were created
@@ -1215,13 +1072,12 @@ def hello():
         (temp_dir / "style.css").write_text("body { color: red; }")
 
         collection = get_or_create_collection(temp_chroma_client, "test_unsupported")
-        state_file = str(temp_dir / "state.json")
 
         stats = ingest_codebase(
             root_path=str(temp_dir),
             collection=collection,
             repo_id="test",
-            state_file=state_file,
+            
         )
 
         # Python file should be processed, CSS skipped
@@ -1243,13 +1099,12 @@ export type UserRole = "admin" | "user" | "guest";
 ''')
 
         collection = get_or_create_collection(temp_chroma_client, "test_ts")
-        state_file = str(temp_dir / "state.json")
 
         stats = ingest_codebase(
             root_path=str(temp_dir),
             collection=collection,
             repo_id="test",
-            state_file=state_file,
+            
         )
 
         assert stats["files_processed"] == 1
@@ -1272,14 +1127,13 @@ export type UserRole = "admin" | "user" | "guest";
         (code_dir / "main.py").write_text("def main(): pass")
 
         collection = get_or_create_collection(temp_chroma_client, "test_meta_delta")
-        state_file = str(temp_dir / "state.json")
 
         # First ingestion
         stats1 = ingest_codebase(
             root_path=str(code_dir),
             collection=collection,
             repo_id="test",
-            state_file=state_file,
+            
         )
         assert stats1["files_processed"] == 1
 
@@ -1288,7 +1142,7 @@ export type UserRole = "admin" | "user" | "guest";
             root_path=str(code_dir),
             collection=collection,
             repo_id="test",
-            state_file=state_file,
+            
         )
         # Should skip unchanged files
         assert stats2["files_processed"] == 0

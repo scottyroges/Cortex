@@ -55,16 +55,6 @@ def get_default_db_path() -> str:
 DB_PATH = get_default_db_path()
 
 
-def get_default_state_file() -> str:
-    """Get the default state file path."""
-    env_path = os.environ.get("CORTEX_STATE_FILE")
-    if env_path:
-        return os.path.expanduser(env_path)
-    return os.path.join(DB_PATH, "ingest_state.json")
-
-
-STATE_FILE = get_default_state_file()
-
 # --- Ignore Patterns ---
 
 DEFAULT_IGNORE_PATTERNS = {

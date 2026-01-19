@@ -18,7 +18,6 @@ from src.git import (
     get_current_branch,
     get_merge_commits_since,
 )
-from src.state import load_state, migrate_state
 from src.tools.services import get_collection
 
 logger = get_logger("tools.orient")
@@ -106,20 +105,20 @@ class StalenessDetector:
         project_path: str,
         indexed_branch: Optional[str],
         current_branch: str,
-        last_indexed: Optional[str],
+        indexed_commit: Optional[str],
         indexed_file_count: int,
     ):
         self.project_path = project_path
         self.indexed_branch = indexed_branch
         self.current_branch = current_branch
-        self.last_indexed = last_indexed
+        self.indexed_commit = indexed_commit
         self.indexed_file_count = indexed_file_count
 
     def detect(self) -> StalenessResult:
         """Check for all staleness signals."""
         result = StalenessResult()
 
-        if not self.last_indexed:
+        if not self.indexed_commit:
             return result
 
         self._check_branch_change(result)
@@ -138,13 +137,13 @@ class StalenessDetector:
 
     def _check_new_commits(self, result: StalenessResult) -> None:
         """Signal 2 & 3: New commits and merges since index."""
-        commits_since = get_commits_since(self.project_path, self.last_indexed)
+        commits_since = get_commits_since(self.project_path, self.indexed_commit)
         if commits_since > 0:
             result.needs_reindex = True
             result.reasons.append(f"{commits_since} new commit(s) since last index")
 
             # Additional info about merges
-            merges = get_merge_commits_since(self.project_path, self.last_indexed)
+            merges = get_merge_commits_since(self.project_path, self.indexed_commit)
             if merges > 0:
                 result.reasons.append(f"Including {merges} merge commit(s)")
 
@@ -171,6 +170,30 @@ class RepositoryContext:
         self.collection = collection
         self.repo_name = repo_name
         self.branch = branch
+
+    def is_indexed(self) -> bool:
+        """Check if repository has indexed file_metadata documents.
+
+        Uses limit=1 for fast existence check.
+
+        Returns:
+            True if at least one file_metadata doc exists for this repo
+        """
+        try:
+            result = self.collection.get(
+                where={
+                    "$and": [
+                        {"type": "file_metadata"},
+                        {"repository": self.repo_name},
+                    ]
+                },
+                include=[],
+                limit=1,
+            )
+            return len(result.get("ids", [])) > 0
+        except Exception as e:
+            logger.warning(f"Failed to check index status: {e}")
+            return False
 
     def fetch_skeleton(self) -> Optional[dict]:
         """Fetch skeleton data from collection."""
@@ -201,6 +224,8 @@ class RepositoryContext:
                     "total_files": meta.get("total_files", 0),
                     "total_dirs": meta.get("total_dirs", 0),
                     "branch": meta.get("branch", "unknown"),
+                    "updated_at": meta.get("updated_at"),
+                    "indexed_commit": meta.get("indexed_commit"),
                 }
         except Exception as e:
             logger.warning(f"Failed to fetch skeleton: {e}")
@@ -470,33 +495,29 @@ def orient_session(project_path: str) -> str:
         repo_name = project_path.rstrip("/").split("/")[-1]
         current_branch = get_current_branch(project_path)
 
-        # Load ingestion state
-        state = migrate_state(load_state())
+        # Fetch repository context
+        context = RepositoryContext(collection, repo_name, current_branch)
 
-        # Check if this specific repository is indexed
-        indexed_repo = state.get("repository")
-        indexed = bool(
-            indexed_repo == repo_name
-            and (state.get("indexed_commit") or state.get("file_hashes"))
-        )
+        # Check if indexed by querying DB for file_metadata docs (fast, limit=1)
+        indexed = context.is_indexed()
 
-        last_indexed = state.get("indexed_at") if indexed else None
-        indexed_branch = state.get("branch") if indexed else None
-        indexed_file_count = len(state.get("file_hashes", {})) if indexed else 0
+        # Fetch skeleton for file count and indexed_commit
+        skeleton_data = context.fetch_skeleton()
 
-        # Staleness detection
+        # Get staleness info from skeleton metadata
+        indexed_file_count = skeleton_data.get("total_files", 0) if skeleton_data else 0
+        indexed_branch = skeleton_data.get("branch") if skeleton_data else None
+        indexed_commit = skeleton_data.get("indexed_commit") if skeleton_data else None
+
+        # Staleness detection using skeleton metadata
         detector = StalenessDetector(
             project_path=project_path,
             indexed_branch=indexed_branch,
             current_branch=current_branch,
-            last_indexed=last_indexed,
+            indexed_commit=indexed_commit,
             indexed_file_count=indexed_file_count,
         )
         staleness = detector.detect() if indexed else StalenessResult()
-
-        # Fetch repository context
-        context = RepositoryContext(collection, repo_name, current_branch)
-        skeleton_data = context.fetch_skeleton()
         tech_stack = context.fetch_tech_stack()
         focused_initiative = context.fetch_focused_initiative()
         active_initiatives = context.fetch_active_initiatives()
@@ -506,6 +527,9 @@ def orient_session(project_path: str) -> str:
         legacy_initiative = None
         if not focused_initiative and not active_initiatives:
             legacy_initiative = context.fetch_initiative_legacy()
+
+        # Get last indexed timestamp from skeleton (updated_at)
+        last_indexed = skeleton_data.get("updated_at") if skeleton_data else None
 
         # Build response
         response: dict[str, Any] = {

@@ -61,22 +61,6 @@ def delete_file_chunks(
     return deleted_count
 
 
-def cleanup_state_entries(
-    state: dict[str, Any],
-    deleted_files: list[str],
-) -> None:
-    """
-    Remove deleted files from state's file_hashes.
-
-    Args:
-        state: State dictionary with file_hashes key
-        deleted_files: List of file paths to remove
-    """
-    file_hashes = state.get("file_hashes", {})
-    for file_path in deleted_files:
-        file_hashes.pop(file_path, None)
-
-
 def cleanup_deprecated_insights(
     collection: chromadb.Collection,
     max_age_days: int = DEPRECATED_MAX_AGE_DAYS,

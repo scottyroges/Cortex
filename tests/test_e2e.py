@@ -172,11 +172,10 @@ def test_auth_token():
         # skeleton may or may not be present depending on indexing state
         assert orient_result["indexed"] is False  # Not yet indexed
 
-        # Step 2: Ingest - index the codebase (force_full to avoid state file issues in tests)
+        # Step 2: Ingest - index the codebase
         ingest_result = json.loads(ingest_code_into_cortex(
             path=str(project_with_code),
             repository=orient_result["repository"],
-            force_full=True,
         ))
 
         assert ingest_result["status"] == "success"
@@ -216,8 +215,8 @@ def test_auth_token():
         orient_result = json.loads(orient_session(str(project_with_code)))
         repo = orient_result["repository"]
 
-        # Ingest (force_full to avoid state file issues in tests)
-        json.loads(ingest_code_into_cortex(path=str(project_with_code), repository=repo, force_full=True))
+        # Ingest
+        json.loads(ingest_code_into_cortex(path=str(project_with_code), repository=repo))
 
         # The ingestion completed successfully - that's the key test
         # Search may or may not return results depending on LLM description generation

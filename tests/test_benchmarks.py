@@ -254,15 +254,11 @@ def utility_function_{module_idx}_{file_idx}(data: Optional[str] = None) -> str:
 
         collection = get_or_create_collection(temp_chroma_client, "throughput_small")
 
-        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
-            state_file = f.name
-
         start = time.perf_counter()
         stats = ingest_codebase(
             root_path=str(codebase_small),
             collection=collection,
             repo_id="throughput-test",
-            state_file=state_file,
         )
         elapsed = time.perf_counter() - start
 
@@ -279,15 +275,11 @@ def utility_function_{module_idx}_{file_idx}(data: Optional[str] = None) -> str:
 
         collection = get_or_create_collection(temp_chroma_client, "throughput_medium")
 
-        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
-            state_file = f.name
-
         start = time.perf_counter()
         stats = ingest_codebase(
             root_path=str(codebase_medium),
             collection=collection,
             repo_id="throughput-medium",
-            state_file=state_file,
         )
         elapsed = time.perf_counter() - start
 
@@ -371,15 +363,11 @@ def validate_{i}(value: Optional[str]) -> bool:
 
         collection = get_or_create_collection(temp_chroma_client, "large_codebase")
 
-        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
-            state_file = f.name
-
         start = time.perf_counter()
         stats = ingest_codebase(
             root_path=str(codebase_large),
             collection=collection,
             repo_id="large-test",
-            state_file=state_file,
         )
         elapsed = time.perf_counter() - start
 
@@ -396,15 +384,11 @@ def validate_{i}(value: Optional[str]) -> bool:
 
         collection = get_or_create_collection(temp_chroma_client, "large_search")
 
-        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
-            state_file = f.name
-
         # Ingest all files
         ingest_codebase(
             root_path=str(codebase_large),
             collection=collection,
             repo_id="large-search-test",
-            state_file=state_file,
         )
 
         # Now test search performance
@@ -440,9 +424,6 @@ class TestMemoryEfficiency:
 
         collection = get_or_create_collection(temp_chroma_client, "memory_test")
 
-        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
-            state_file = f.name
-
         # Create initial files
         src = temp_dir / "src"
         src.mkdir()
@@ -454,7 +435,6 @@ class TestMemoryEfficiency:
             root_path=str(temp_dir),
             collection=collection,
             repo_id="memory-test",
-            state_file=state_file,
         )
 
         gc.collect()
@@ -471,7 +451,6 @@ class TestMemoryEfficiency:
                 root_path=str(temp_dir),
                 collection=collection,
                 repo_id="memory-test",
-                    state_file=state_file,
             )
 
             # Verify incremental behavior (only new files processed)

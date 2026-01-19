@@ -15,10 +15,10 @@ from pathlib import Path
 from typing import Optional
 
 from logging_config import get_logger
+from src.git import get_current_branch
 from src.ingest import ingest_codebase
 from src.ingest.engine import select_delta_strategy
 from src.llm import get_provider
-from src.state import load_state, migrate_state
 from src.tools.services import CONFIG, get_collection, get_searcher
 
 logger = get_logger("tools.ingest")
@@ -76,12 +76,14 @@ def ingest_code_into_cortex(
     if not force_full:
         # Calculate delta to decide sync vs async
         try:
-            raw_state = load_state()
-            state = migrate_state(raw_state)
+            collection = get_collection()
+            branch = get_current_branch(path)
 
             strategy = select_delta_strategy(
                 path,
-                state,
+                collection,
+                repo_id,
+                branch,
                 force_full=False,
                 include_patterns=include_patterns,
                 use_cortexignore=use_cortexignore,

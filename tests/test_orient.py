@@ -4,11 +4,10 @@ Tests for orient_session tool and git staleness detection.
 
 import json
 import subprocess
-import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -20,13 +19,8 @@ class TestOrientSession:
         """Test orient_session on an unindexed project."""
         from src.tools.orient import orient_session
 
-        with patch("src.tools.orient.get_collection") as mock_collection, \
-             patch("src.tools.orient.load_state") as mock_load_state:
-
-            # Empty state - not indexed
-            mock_load_state.return_value = {}
-
-            # Empty collection
+        with patch("src.tools.orient.get_collection") as mock_collection:
+            # Empty collection - no file_metadata docs
             mock_collection.return_value.get.return_value = {
                 "ids": [],
                 "documents": [],
@@ -50,24 +44,40 @@ class TestOrientSession:
         project_name = temp_git_repo.name
         indexed_at = datetime.now(timezone.utc).isoformat()
 
-        with patch("src.tools.orient.get_collection") as mock_collection, \
-             patch("src.tools.orient.load_state") as mock_load_state:
+        with patch("src.tools.orient.get_collection") as mock_collection:
+            # Create mock collection that responds correctly to different queries
+            def mock_get(**kwargs):
+                # Check for is_indexed (limit=1 file_metadata query)
+                if kwargs.get("limit") == 1:
+                    where = kwargs.get("where", {})
+                    if isinstance(where, dict) and "$and" in where:
+                        conditions = where["$and"]
+                        if any(c.get("type") == "file_metadata" for c in conditions):
+                            return {
+                                "ids": ["file1"],
+                                "documents": [],
+                                "metadatas": [],
+                            }
 
-            # State shows indexed
-            mock_load_state.return_value = {
-                "repository": project_name,
-                "indexed_commit": "abc123",
-                "indexed_at": indexed_at,
-                "branch": "main",
-                "file_hashes": {"file1.py": "hash1", "file2.py": "hash2"},
-            }
+                # Check for skeleton lookup
+                if "ids" in kwargs:
+                    ids = kwargs["ids"]
+                    if any("skeleton" in str(id) for id in ids):
+                        return {
+                            "ids": [f"{project_name}:skeleton:main"],
+                            "documents": ["src/\n  main.py\n  utils.py"],
+                            "metadatas": [{
+                                "total_files": 2,
+                                "total_dirs": 1,
+                                "branch": "main",
+                                "indexed_commit": "abc123",
+                                "updated_at": indexed_at,
+                            }],
+                        }
 
-            # Empty collection for skeleton/context lookups
-            mock_collection.return_value.get.return_value = {
-                "ids": [],
-                "documents": [],
-                "metadatas": [],
-            }
+                return {"ids": [], "documents": [], "metadatas": []}
+
+            mock_collection.return_value.get.side_effect = mock_get
 
             result = json.loads(orient_session(str(temp_git_repo)))
 
@@ -84,24 +94,35 @@ class TestOrientSession:
         indexed_at = datetime.now(timezone.utc).isoformat()
 
         with patch("src.tools.orient.get_collection") as mock_collection, \
-             patch("src.tools.orient.load_state") as mock_load_state, \
              patch("src.tools.orient.get_current_branch") as mock_branch:
 
-            # Indexed on 'main', but now on 'feature'
-            mock_load_state.return_value = {
-                "repository": project_name,
-                "indexed_commit": "abc123",
-                "indexed_at": indexed_at,
-                "branch": "main",
-                "file_hashes": {"file1.py": "hash1"},
-            }
+            # Current branch is 'feature' but indexed on 'main'
             mock_branch.return_value = "feature"
 
-            mock_collection.return_value.get.return_value = {
-                "ids": [],
-                "documents": [],
-                "metadatas": [],
-            }
+            def mock_get(**kwargs):
+                # is_indexed check
+                if kwargs.get("limit") == 1:
+                    return {"ids": ["file1"], "documents": [], "metadatas": []}
+
+                # Skeleton lookup
+                if "ids" in kwargs:
+                    ids = kwargs["ids"]
+                    if any("skeleton" in str(id) for id in ids):
+                        return {
+                            "ids": [f"{project_name}:skeleton:main"],
+                            "documents": ["src/"],
+                            "metadatas": [{
+                                "total_files": 1,
+                                "total_dirs": 1,
+                                "branch": "main",  # Indexed on main
+                                "indexed_commit": "abc123",
+                                "updated_at": indexed_at,
+                            }],
+                        }
+
+                return {"ids": [], "documents": [], "metadatas": []}
+
+            mock_collection.return_value.get.side_effect = mock_get
 
             result = json.loads(orient_session(str(temp_git_repo)))
 
@@ -116,23 +137,34 @@ class TestOrientSession:
         indexed_at = datetime.now(timezone.utc).isoformat()
 
         with patch("src.tools.orient.get_collection") as mock_collection, \
-             patch("src.tools.orient.load_state") as mock_load_state, \
              patch("src.tools.orient.get_commits_since") as mock_commits:
 
-            mock_load_state.return_value = {
-                "repository": project_name,
-                "indexed_commit": "abc123",
-                "indexed_at": indexed_at,
-                "branch": "main",
-                "file_hashes": {"file1.py": "hash1"},
-            }
             mock_commits.return_value = 5  # 5 new commits
 
-            mock_collection.return_value.get.return_value = {
-                "ids": [],
-                "documents": [],
-                "metadatas": [],
-            }
+            def mock_get(**kwargs):
+                # is_indexed check
+                if kwargs.get("limit") == 1:
+                    return {"ids": ["file1"], "documents": [], "metadatas": []}
+
+                # Skeleton lookup
+                if "ids" in kwargs:
+                    ids = kwargs["ids"]
+                    if any("skeleton" in str(id) for id in ids):
+                        return {
+                            "ids": [f"{project_name}:skeleton:main"],
+                            "documents": ["src/"],
+                            "metadatas": [{
+                                "total_files": 1,
+                                "total_dirs": 1,
+                                "branch": "main",
+                                "indexed_commit": "abc123",
+                                "updated_at": indexed_at,
+                            }],
+                        }
+
+                return {"ids": [], "documents": [], "metadatas": []}
+
+            mock_collection.return_value.get.side_effect = mock_get
 
             result = json.loads(orient_session(str(temp_git_repo)))
 
@@ -147,25 +179,36 @@ class TestOrientSession:
         indexed_at = datetime.now(timezone.utc).isoformat()
 
         with patch("src.tools.orient.get_collection") as mock_collection, \
-             patch("src.tools.orient.load_state") as mock_load_state, \
              patch("src.tools.orient.get_commits_since") as mock_commits, \
              patch("src.tools.orient.count_tracked_files") as mock_count:
 
-            mock_load_state.return_value = {
-                "repository": project_name,
-                "indexed_commit": "abc123",
-                "indexed_at": indexed_at,
-                "branch": "main",
-                "file_hashes": {"file1.py": "hash1"},  # 1 file indexed
-            }
             mock_commits.return_value = 0
             mock_count.return_value = 20  # Now 20 files (diff > 5 threshold)
 
-            mock_collection.return_value.get.return_value = {
-                "ids": [],
-                "documents": [],
-                "metadatas": [],
-            }
+            def mock_get(**kwargs):
+                # is_indexed check
+                if kwargs.get("limit") == 1:
+                    return {"ids": ["file1"], "documents": [], "metadatas": []}
+
+                # Skeleton lookup
+                if "ids" in kwargs:
+                    ids = kwargs["ids"]
+                    if any("skeleton" in str(id) for id in ids):
+                        return {
+                            "ids": [f"{project_name}:skeleton:main"],
+                            "documents": ["src/"],
+                            "metadatas": [{
+                                "total_files": 1,  # Only 1 file indexed
+                                "total_dirs": 1,
+                                "branch": "main",
+                                "indexed_commit": "abc123",
+                                "updated_at": indexed_at,
+                            }],
+                        }
+
+                return {"ids": [], "documents": [], "metadatas": []}
+
+            mock_collection.return_value.get.side_effect = mock_get
 
             result = json.loads(orient_session(str(temp_git_repo)))
 
@@ -177,20 +220,16 @@ class TestOrientSession:
         from src.tools.orient import orient_session
 
         project_name = temp_git_repo.name
+        indexed_at = datetime.now(timezone.utc).isoformat()
 
-        with patch("src.tools.orient.get_collection") as mock_collection, \
-             patch("src.tools.orient.load_state") as mock_load_state:
+        with patch("src.tools.orient.get_collection") as mock_collection:
 
-            mock_load_state.return_value = {
-                "repository": project_name,
-                "indexed_commit": "abc123",
-                "indexed_at": datetime.now(timezone.utc).isoformat(),
-                "branch": "main",
-                "file_hashes": {},
-            }
-
-            # Return skeleton on first call
             def mock_get(**kwargs):
+                # is_indexed check
+                if kwargs.get("limit") == 1:
+                    return {"ids": ["file1"], "documents": [], "metadatas": []}
+
+                # Return skeleton
                 if "ids" in kwargs and "skeleton" in kwargs["ids"][0]:
                     return {
                         "ids": [f"{project_name}:skeleton:main"],
@@ -199,6 +238,8 @@ class TestOrientSession:
                             "total_files": 2,
                             "total_dirs": 1,
                             "branch": "main",
+                            "indexed_commit": "abc123",
+                            "updated_at": indexed_at,
                         }],
                     }
                 return {"ids": [], "documents": [], "metadatas": []}
@@ -217,22 +258,15 @@ class TestOrientSession:
 
         project_name = temp_git_repo.name
         tech_stack_content = "Python, FastAPI, PostgreSQL"
+        indexed_at = datetime.now(timezone.utc).isoformat()
 
-        with patch("src.tools.orient.get_collection") as mock_collection, \
-             patch("src.tools.orient.load_state") as mock_load_state:
-
-            mock_load_state.return_value = {
-                "repository": project_name,
-                "indexed_commit": "abc123",
-                "indexed_at": datetime.now(timezone.utc).isoformat(),
-                "branch": "main",
-                "file_hashes": {},
-            }
-
-            call_count = [0]
+        with patch("src.tools.orient.get_collection") as mock_collection:
 
             def mock_get(**kwargs):
-                call_count[0] += 1
+                # is_indexed check
+                if kwargs.get("limit") == 1:
+                    return {"ids": ["file1"], "documents": [], "metadatas": []}
+
                 if "ids" in kwargs:
                     ids = kwargs["ids"]
                     if any("tech_stack" in id for id in ids):
@@ -240,6 +274,18 @@ class TestOrientSession:
                             "ids": [f"{project_name}:tech_stack"],
                             "documents": [tech_stack_content],
                             "metadatas": [{}],
+                        }
+                    if any("skeleton" in id for id in ids):
+                        return {
+                            "ids": [f"{project_name}:skeleton:main"],
+                            "documents": ["src/"],
+                            "metadatas": [{
+                                "total_files": 1,
+                                "total_dirs": 1,
+                                "branch": "main",
+                                "indexed_commit": "abc123",
+                                "updated_at": indexed_at,
+                            }],
                         }
                 return {"ids": [], "documents": [], "metadatas": []}
 
@@ -255,19 +301,15 @@ class TestOrientSession:
         from src.tools.orient import orient_session
 
         project_name = temp_git_repo.name
+        indexed_at = datetime.now(timezone.utc).isoformat()
 
-        with patch("src.tools.orient.get_collection") as mock_collection, \
-             patch("src.tools.orient.load_state") as mock_load_state:
-
-            mock_load_state.return_value = {
-                "repository": project_name,
-                "indexed_commit": "abc123",
-                "indexed_at": datetime.now(timezone.utc).isoformat(),
-                "branch": "main",
-                "file_hashes": {},
-            }
+        with patch("src.tools.orient.get_collection") as mock_collection:
 
             def mock_get(**kwargs):
+                # is_indexed check
+                if kwargs.get("limit") == 1:
+                    return {"ids": ["file1"], "documents": [], "metadatas": []}
+
                 if "ids" in kwargs:
                     ids = kwargs["ids"]
                     if any("initiative" in id for id in ids):
@@ -277,6 +319,18 @@ class TestOrientSession:
                             "metadatas": [{
                                 "initiative_name": "Auth System Migration",
                                 "initiative_status": "Phase 2: In Progress",
+                            }],
+                        }
+                    if any("skeleton" in id for id in ids):
+                        return {
+                            "ids": [f"{project_name}:skeleton:main"],
+                            "documents": ["src/"],
+                            "metadatas": [{
+                                "total_files": 1,
+                                "total_dirs": 1,
+                                "branch": "main",
+                                "indexed_commit": "abc123",
+                                "updated_at": indexed_at,
                             }],
                         }
                 return {"ids": [], "documents": [], "metadatas": []}

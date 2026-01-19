@@ -183,6 +183,7 @@ def store_skeleton(
     repo_id: str,
     branch: str,
     stats: dict,
+    indexed_commit: Optional[str] = None,
 ) -> str:
     """
     Store skeleton in collection with type='skeleton' metadata.
@@ -193,6 +194,7 @@ def store_skeleton(
         repo_id: Repository identifier
         branch: Git branch name
         stats: Tree statistics
+        indexed_commit: Git commit hash at time of indexing (for delta sync)
 
     Returns:
         Document ID
@@ -200,20 +202,22 @@ def store_skeleton(
     doc_id = f"{repo_id}:skeleton:{branch}"
 
     now = datetime.now(timezone.utc).isoformat()
+    meta = {
+        "type": "skeleton",
+        "repository": repo_id,
+        "branch": branch,
+        "created_at": now,
+        "updated_at": now,
+        "total_files": stats.get("total_files", 0),
+        "total_dirs": stats.get("total_dirs", 0),
+    }
+    if indexed_commit:
+        meta["indexed_commit"] = indexed_commit
+
     collection.upsert(
         ids=[doc_id],
         documents=[tree_output],
-        metadatas=[
-            {
-                "type": "skeleton",
-                "repository": repo_id,
-                "branch": branch,
-                "created_at": now,
-                "updated_at": now,
-                "total_files": stats.get("total_files", 0),
-                "total_dirs": stats.get("total_dirs", 0),
-            }
-        ],
+        metadatas=[meta],
     )
 
     logger.debug(f"Skeleton stored: {doc_id} ({stats['total_files']} files, {stats['total_dirs']} dirs)")

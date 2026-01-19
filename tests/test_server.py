@@ -93,14 +93,10 @@ class TestIngestCodeIntoCortex:
 
         collection = get_or_create_collection(temp_chroma_client, "test")
 
-        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
-            state_file = f.name
-
         stats = ingest_codebase(
             root_path=str(temp_dir),
             collection=collection,
             repo_id="testproject",
-            state_file=state_file,
         )
 
         assert stats["files_processed"] == 2
@@ -123,14 +119,10 @@ class TestIngestCodeIntoCortex:
 
         collection = get_or_create_collection(temp_chroma_client, "force_test")
 
-        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
-            state_file = f.name
-
         # First ingest
         stats1 = ingest_codebase(
             root_path=str(temp_dir),
             collection=collection,
-            state_file=state_file,
         )
         assert stats1["files_processed"] == 1
 
@@ -138,7 +130,6 @@ class TestIngestCodeIntoCortex:
         stats2 = ingest_codebase(
             root_path=str(temp_dir),
             collection=collection,
-            state_file=state_file,
         )
         assert stats2["files_processed"] == 0
 
@@ -146,7 +137,6 @@ class TestIngestCodeIntoCortex:
         stats3 = ingest_codebase(
             root_path=str(temp_dir),
             collection=collection,
-            state_file=state_file,
             force_full=True,
         )
         assert stats3["files_processed"] == 1
@@ -772,15 +762,11 @@ def validate_input(value):
 
         collection = get_or_create_collection(temp_chroma_client, "integration")
 
-        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
-            state_file = f.name
-
         # Ingest
         stats = ingest_codebase(
             root_path=str(temp_dir),
             collection=collection,
             repo_id="testcalc",
-            state_file=state_file,
         )
 
         assert stats["files_processed"] == 2
