@@ -20,8 +20,8 @@ def main():
         import os
         from src.configs import get_logger, setup_logging
         from src.controllers.http import run_server
-        from src.autocapture import start_processor
-        from src.ingest.async_processor import start_worker as start_ingestion_worker
+        from src.tools.autocapture import start_processor
+        from src.tools.ingest.async_processor import start_worker as start_ingestion_worker
 
         # Initialize logging (must be called before get_logger)
         setup_logging()
