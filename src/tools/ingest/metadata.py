@@ -31,11 +31,11 @@ from src.external.llm import LLMProvider
 from src.utils.secret_scrubber import scrub_secrets
 
 if TYPE_CHECKING:
-    from src.models.documents import (
-        FileMetadataDoc,
+    from src.models import (
         DataContractDoc,
-        EntryPointDoc,
         DependencyDoc,
+        EntryPointDoc,
+        FileMetadataDoc,
     )
 
 logger = get_logger("ingest.metadata")

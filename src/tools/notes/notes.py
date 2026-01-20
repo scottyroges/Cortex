@@ -23,7 +23,7 @@ from src.tools.initiatives.initiative_utils import find_initiative, resolve_init
 from src.configs.services import CONFIG, get_collection, get_repo_path, get_searcher
 
 if TYPE_CHECKING:
-    from src.models.documents import NoteDoc, InsightDoc, SessionSummaryDoc
+    from src.models import InsightDoc, NoteDoc, SessionSummaryDoc
 
 logger = get_logger("tools.notes")
 

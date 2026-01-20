@@ -935,7 +935,7 @@ class TestBranchAwareFilter:
     def test_filter_code_types_filtered_by_branch(self):
         """Test that branch-filtered types (code, skeleton, etc.) are in the branch-filtered clause."""
         from src.tools.search.search import build_branch_aware_filter
-        from src.models.documents import BRANCH_FILTERED_TYPES
+        from src.models import BRANCH_FILTERED_TYPES
 
         result = build_branch_aware_filter(repository=None, branches=["feature", "main"])
 
@@ -1360,7 +1360,7 @@ class TestTypeFilter:
 
     def test_invalid_types_filtered_out(self):
         """Test that invalid types are filtered out with warning."""
-        from src.models.documents import ALL_DOCUMENT_TYPES
+        from src.models import ALL_DOCUMENT_TYPES
         from src.tools.search.search import search_cortex
         import json
         from unittest.mock import patch, MagicMock

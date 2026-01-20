@@ -9,7 +9,7 @@ Philosophy: "Code can be grepped. Understanding cannot."
 
 from typing import Any
 
-from src.models.documents import TYPE_MULTIPLIERS
+from src.models import TYPE_MULTIPLIERS
 
 # Re-export for backwards compatibility
 DEFAULT_TYPE_MULTIPLIERS = TYPE_MULTIPLIERS

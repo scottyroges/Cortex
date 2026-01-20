@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from src.configs import get_logger
-from src.models.documents import (
+from src.models import (
     ALL_DOCUMENT_TYPES,
     BRANCH_FILTERED_TYPES,
     METADATA_ONLY_TYPES,
@@ -165,9 +165,9 @@ def build_branch_aware_filter(
     return branch_filter
 
 
-# Valid types imported from src.models.documents: ALL_DOCUMENT_TYPES
-# Branch-filtered types imported from src.models.documents: BRANCH_FILTERED_TYPES
-# Search presets imported from src.models.documents: SEARCH_PRESETS
+# Valid types imported from src.models: ALL_DOCUMENT_TYPES
+# Branch-filtered types imported from src.models: BRANCH_FILTERED_TYPES
+# Search presets imported from src.models: SEARCH_PRESETS
 
 
 @dataclass

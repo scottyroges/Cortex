@@ -8,7 +8,7 @@ import math
 from datetime import datetime, timezone
 from typing import Any
 
-from src.models.documents import RECENCY_BOOSTED_TYPES
+from src.models import RECENCY_BOOSTED_TYPES
 
 
 def apply_recency_boost(
