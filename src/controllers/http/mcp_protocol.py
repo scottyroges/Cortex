@@ -22,7 +22,7 @@ from typing import Any, Callable, Literal, Optional
 from fastapi import APIRouter
 from pydantic import BaseModel, Field, ValidationError
 
-from logging_config import get_logger
+from src.configs import get_logger
 
 logger = get_logger("http.mcp")
 

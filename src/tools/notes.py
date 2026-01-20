@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal, Optional, TYPE_CHECKING
 
-from logging_config import get_logger
+from src.configs import get_logger
 from src.git import get_current_branch, get_head_commit
 from src.ingest.walker import compute_file_hash
 from src.security import scrub_secrets

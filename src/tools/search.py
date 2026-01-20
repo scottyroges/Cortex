@@ -9,7 +9,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Optional
 
-from logging_config import get_logger
+from src.configs import get_logger
 from src.documents import (
     ALL_DOCUMENT_TYPES,
     BRANCH_FILTERED_TYPES,

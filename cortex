@@ -12,7 +12,6 @@
 #   cortex daemon restart - Restart the daemon
 #   cortex daemon status - Check daemon status
 #   cortex daemon logs  - View daemon logs
-#   cortex stdio        - Run in legacy stdio mode (no daemon)
 #
 # Configuration:
 #   Settings are stored in ~/.cortex/config.yaml
@@ -322,9 +321,9 @@ start_summarizer() {
     # Ensure data directory exists
     mkdir -p "$DATA_PATH"
 
-    # Start summarizer in background (run from cortex source directory)
+    # Start proxy server in background (run from cortex source directory)
     cd "$CORTEX_SRC_DIR"
-    nohup python3 -m src.summarizer.server --port "$SUMMARIZER_PORT" \
+    nohup python3 -m src.controllers.proxy.server --port "$SUMMARIZER_PORT" \
         > "$DATA_PATH/summarizer.log" 2>&1 &
     local pid=$!
     cd - >/dev/null
@@ -692,19 +691,6 @@ run_bridge() {
         -e "CORTEX_DAEMON_URL=http://localhost:${DAEMON_PORT}" \
         "${DOCKER_ENVS[@]}" \
         "$IMAGE_NAME" bridge
-}
-
-run_stdio_legacy() {
-    # Legacy mode: run stdio MCP server directly (no daemon)
-    log_info "Running in legacy stdio mode..."
-
-    build_docker_volumes
-    build_docker_env
-
-    exec docker run -i --rm \
-        "${DOCKER_VOLUMES[@]}" \
-        "${DOCKER_ENVS[@]}" \
-        "$IMAGE_NAME" stdio
 }
 
 # --- Update Command ---
@@ -1495,7 +1481,6 @@ COMMANDS:
     stop                Shortcut for 'daemon stop'
     logs                Shortcut for 'daemon logs'
     rebuild             Shortcut for 'daemon rebuild'
-    stdio               Run in legacy stdio mode (no daemon)
     help, --help, -h    Show this help message
 
 CONFIGURATION:
@@ -1596,11 +1581,6 @@ case "${1:-}" in
         ;;
     stop)
         stop_daemon
-        ;;
-    stdio)
-        # Legacy stdio mode
-        build_image_if_needed
-        run_stdio_legacy
         ;;
     logs)
         daemon_logs

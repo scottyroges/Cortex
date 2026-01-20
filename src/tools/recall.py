@@ -9,7 +9,7 @@ import json
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
-from logging_config import get_logger
+from src.configs import get_logger
 from src.tools.services import get_collection
 
 logger = get_logger("tools.recall")

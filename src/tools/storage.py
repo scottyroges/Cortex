@@ -7,7 +7,7 @@ MCP tools for storage management - cleanup orphaned data and delete documents.
 import json
 from typing import Literal, Optional
 
-from logging_config import get_logger
+from src.configs import get_logger
 from src.storage.gc import (
     cleanup_orphaned_file_metadata,
     cleanup_orphaned_insights,

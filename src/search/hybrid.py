@@ -10,7 +10,7 @@ from typing import Any, Optional
 
 import chromadb
 
-from logging_config import get_logger
+from src.configs import get_logger
 from src.search.bm25 import BM25Index
 
 logger = get_logger("search.hybrid")

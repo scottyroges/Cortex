@@ -8,7 +8,7 @@ import os
 import time
 from typing import Optional
 
-from logging_config import get_logger
+from src.configs import get_logger
 from src.http.http_client import http_json_get
 
 logger = get_logger("version")

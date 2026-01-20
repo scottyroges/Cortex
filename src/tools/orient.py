@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
-from logging_config import get_logger
+from src.configs import get_logger
 from src.config import get_llm_provider, load_yaml_config
 from src.git import (
     count_tracked_files,

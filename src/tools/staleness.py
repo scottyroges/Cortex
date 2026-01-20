@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-from logging_config import get_logger
+from src.configs import get_logger
 from src.config import DEFAULT_CONFIG
 from src.ingest.walker import compute_file_hash
 

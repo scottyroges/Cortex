@@ -12,7 +12,7 @@ from typing import Optional
 
 import chromadb
 
-from logging_config import get_logger
+from src.configs import get_logger
 from src.config import load_ignore_patterns
 
 logger = get_logger("ingest.skeleton")

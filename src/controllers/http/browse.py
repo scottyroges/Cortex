@@ -11,7 +11,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
-from logging_config import get_logger
+from src.configs import get_logger
 from src.http.resources import get_collection, get_reranker, get_searcher
 from src.storage.gc import (
     cleanup_orphaned_file_metadata,

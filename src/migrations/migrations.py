@@ -5,7 +5,7 @@ Each migration is a function that modifies the database/state.
 Migrations should be idempotent where possible.
 """
 
-from logging_config import get_logger
+from src.configs import get_logger
 
 logger = get_logger("migrations")
 

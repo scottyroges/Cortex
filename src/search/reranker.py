@@ -9,7 +9,7 @@ from typing import Any
 
 from flashrank import Ranker, RerankRequest
 
-from logging_config import get_logger
+from src.configs import get_logger
 
 logger = get_logger("search.reranker")
 

@@ -12,7 +12,7 @@ from typing import Any
 
 import chromadb
 
-from logging_config import get_logger
+from src.configs import get_logger
 
 logger = get_logger("storage.gc")
 

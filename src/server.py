@@ -16,7 +16,7 @@ import threading
 
 from mcp.server.fastmcp import FastMCP
 
-from logging_config import get_logger, setup_logging
+from src.configs import get_logger, setup_logging
 from src.tools import (
     cleanup_storage,
     configure_cortex,

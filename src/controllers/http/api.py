@@ -14,7 +14,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
-from logging_config import get_logger
+from src.configs import get_logger
 from src.config import get_data_path
 from src.http.resources import get_collection, get_reranker, get_searcher
 from src.security import scrub_secrets

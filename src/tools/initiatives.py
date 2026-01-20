@@ -12,7 +12,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Literal, Optional
 
-from logging_config import get_logger
+from src.configs import get_logger
 from src.git import get_current_branch
 from src.tools.initiative_utils import calculate_duration, calculate_duration_from_now, find_initiative
 from src.tools.services import get_collection, get_repo_path, get_searcher

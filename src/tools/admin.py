@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal, Optional
 
-from logging_config import get_logger
+from src.configs import get_logger
 from src.git import get_current_branch
 from src.security import scrub_secrets
 from src.tools.services import CONFIG, get_collection, get_repo_path, get_searcher

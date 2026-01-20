@@ -8,7 +8,7 @@ No API key required - runs entirely locally.
 import time
 from typing import Optional
 
-from logging_config import get_logger
+from src.configs import get_logger
 from src.exceptions import LLMConnectionError, LLMResponseError, LLMTimeoutError
 from src.http.http_client import HTTPError, http_json_get, http_json_post
 

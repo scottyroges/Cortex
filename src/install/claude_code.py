@@ -10,7 +10,7 @@ import shutil
 from pathlib import Path
 from typing import Optional
 
-from logging_config import get_logger
+from src.configs import get_logger
 from src.config import get_timeout
 
 logger = get_logger("install.claude_code")

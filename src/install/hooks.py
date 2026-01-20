@@ -17,7 +17,7 @@ from .claude_code import (
     get_hook_script_path,
 )
 
-from logging_config import get_logger
+from src.configs import get_logger
 
 logger = get_logger("install.hooks")
 

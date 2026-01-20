@@ -48,7 +48,6 @@ EXPOSE 8080
 # Entrypoint dispatcher supports multiple modes:
 #   daemon  - Run HTTP server for MCP requests (default)
 #   bridge  - Run stdio-to-HTTP bridge for Claude Code session
-#   stdio   - Run original stdio MCP server (backward compatibility)
 #
 # Environment variables:
 #   CORTEX_DEBUG=true           Enable debug logging

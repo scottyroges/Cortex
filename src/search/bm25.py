@@ -11,7 +11,7 @@ from typing import Any, Optional
 import chromadb
 from rank_bm25 import BM25Okapi
 
-from logging_config import get_logger
+from src.configs import get_logger
 
 logger = get_logger("search.bm25")
 

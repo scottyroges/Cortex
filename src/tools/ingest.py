@@ -14,7 +14,7 @@ import time
 from pathlib import Path
 from typing import Literal, Optional
 
-from logging_config import get_logger
+from src.configs import get_logger
 from src.git import get_current_branch
 from src.ingest import ingest_codebase as _ingest_codebase_engine
 from src.ingest.engine import select_delta_strategy

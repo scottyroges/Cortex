@@ -12,7 +12,7 @@ import tree_sitter_typescript
 import tree_sitter_kotlin
 from tree_sitter import Language, Parser, Tree
 
-from logging_config import get_logger
+from src.configs import get_logger
 
 logger = get_logger("ast.parser")
 

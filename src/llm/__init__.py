@@ -13,7 +13,7 @@ from .claude_cli_provider import ClaudeCLIProvider
 from .ollama_provider import OllamaProvider
 from .openrouter_provider import OpenRouterProvider
 
-from logging_config import get_logger
+from src.configs import get_logger
 
 logger = get_logger("llm")
 

@@ -987,7 +987,7 @@ class TestProcessSyncEndpoint:
 
     def test_process_sync_empty_transcript(self):
         """process_sync skips empty transcripts."""
-        from src.http.api import ProcessSyncRequest, process_sync
+        from src.controllers.http.api import ProcessSyncRequest, process_sync
 
         request = ProcessSyncRequest(
             session_id="test-1",
@@ -1002,7 +1002,7 @@ class TestProcessSyncEndpoint:
 
     def test_process_sync_whitespace_transcript(self):
         """process_sync skips whitespace-only transcripts."""
-        from src.http.api import ProcessSyncRequest, process_sync
+        from src.controllers.http.api import ProcessSyncRequest, process_sync
 
         request = ProcessSyncRequest(
             session_id="test-1",
@@ -1018,7 +1018,7 @@ class TestProcessSyncEndpoint:
     @patch("src.llm.get_provider")
     def test_process_sync_no_provider(self, mock_get_provider, mock_load_config):
         """process_sync returns error when no LLM provider."""
-        from src.http.api import ProcessSyncRequest, process_sync
+        from src.controllers.http.api import ProcessSyncRequest, process_sync
 
         mock_load_config.return_value = {}
         mock_get_provider.return_value = None
@@ -1038,7 +1038,7 @@ class TestProcessSyncEndpoint:
     @patch("src.llm.get_provider")
     def test_process_sync_success(self, mock_get_provider, mock_load_config):
         """process_sync succeeds with mocked dependencies."""
-        from src.http.api import ProcessSyncRequest, process_sync, save_session_summary
+        from src.controllers.http.api import ProcessSyncRequest, process_sync, save_session_summary
 
         mock_load_config.return_value = {}
         mock_provider = MagicMock()
@@ -1054,7 +1054,7 @@ class TestProcessSyncEndpoint:
 
         # Mock save_session_summary at module level
         with patch.object(
-            __import__("src.http.api", fromlist=["save_session_summary"]),
+            __import__("src.controllers.http.api", fromlist=["save_session_summary"]),
             "save_session_summary",
             return_value={"status": "success", "session_id": "test-session"},
         ) as mock_save:
@@ -1072,7 +1072,7 @@ class TestProcessSyncEndpoint:
         self, mock_get_provider, mock_load_config
     ):
         """process_sync returns error when summarization fails."""
-        from src.http.api import ProcessSyncRequest, process_sync
+        from src.controllers.http.api import ProcessSyncRequest, process_sync
 
         mock_load_config.return_value = {}
         mock_provider = MagicMock()

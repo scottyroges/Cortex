@@ -15,7 +15,7 @@ import time
 
 import requests
 
-from logging_config import get_logger, setup_logging
+from src.configs import get_logger, setup_logging
 
 setup_logging()
 logger = get_logger("bridge")

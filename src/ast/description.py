@@ -6,7 +6,7 @@ Generates search-optimized descriptions for source files using configurable LLM 
 
 from typing import Optional
 
-from logging_config import get_logger
+from src.configs import get_logger
 from src.ast.models import FileMetadata
 from src.llm import LLMConfig, LLMProvider, get_provider
 

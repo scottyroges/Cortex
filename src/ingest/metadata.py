@@ -21,7 +21,7 @@ from typing import Any, Optional, TYPE_CHECKING
 
 import chromadb
 
-from logging_config import get_logger
+from src.configs import get_logger
 from src.ast.parser import get_parser
 from src.ast.extractors import get_extractor  # Import from package to trigger registration
 from src.ast.description import generate_description_from_metadata

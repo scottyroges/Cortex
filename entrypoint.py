@@ -7,7 +7,6 @@ Dispatches to the appropriate mode based on command line argument.
 Modes:
   daemon  - Run HTTP server for MCP requests (default)
   bridge  - Run stdio-to-HTTP bridge for Claude Code session
-  stdio   - Run original stdio MCP server (backward compatibility)
 """
 
 import sys
@@ -19,7 +18,7 @@ def main():
     if mode == "daemon":
         # Run HTTP server as daemon
         import os
-        from logging_config import get_logger, setup_logging
+        from src.configs import get_logger, setup_logging
         from src.http import run_server
         from src.autocapture import start_processor
         from src.ingest.async_processor import start_worker as start_ingestion_worker
@@ -64,17 +63,12 @@ def main():
 
     elif mode == "bridge":
         # Run stdio-to-HTTP bridge
-        from mcp_bridge import main as bridge_main
+        from src.controllers.mcp import main as bridge_main
         bridge_main()
-
-    elif mode == "stdio":
-        # Original stdio MCP server (backward compatibility)
-        from src.server import mcp
-        mcp.run()
 
     else:
         print(f"Unknown mode: {mode}", file=sys.stderr)
-        print("Usage: entrypoint.py [daemon|bridge|stdio]", file=sys.stderr)
+        print("Usage: entrypoint.py [daemon|bridge]", file=sys.stderr)
         sys.exit(1)
 
 

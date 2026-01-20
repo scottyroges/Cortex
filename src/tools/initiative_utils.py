@@ -8,7 +8,7 @@ Consolidates duplicated logic from initiatives.py, notes.py, and recall.py.
 from datetime import datetime, timezone
 from typing import Optional
 
-from logging_config import get_logger
+from src.configs import get_logger
 
 logger = get_logger("tools.initiative_utils")
 

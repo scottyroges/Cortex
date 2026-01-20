@@ -10,7 +10,7 @@ import time
 from typing import Optional
 
 from .provider import LLMProvider, LLMConfig, LLMResponse
-from logging_config import get_logger
+from src.configs import get_logger
 
 logger = get_logger("llm.anthropic")
 

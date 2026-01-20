@@ -8,7 +8,7 @@ import os
 import subprocess
 from typing import Optional
 
-from logging_config import get_logger
+from src.configs import get_logger
 from src.config import get_timeout
 from src.exceptions import GitCommandError
 

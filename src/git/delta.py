@@ -7,7 +7,7 @@ Functions for tracking file changes between commits.
 import os
 from typing import Optional
 
-from logging_config import get_logger
+from src.configs import get_logger
 from src.git.subprocess_utils import git_diff_name_status, git_list_files
 
 logger = get_logger("git.delta")

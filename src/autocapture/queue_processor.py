@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from logging_config import get_logger
+from src.configs import get_logger
 from src.config import get_data_path
 
 logger = get_logger("autocapture.queue")

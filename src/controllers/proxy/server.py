@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """
-Summarization Proxy Server
+Host Proxy Server
 
-A lightweight HTTP server that wraps the claude CLI for session summarization.
-Runs on the host so the Docker daemon can access the claude CLI.
+A lightweight HTTP server that provides access to host-only resources
+(like the claude CLI) from inside the Docker container.
 
 Usage:
-    python -m src.summarizer.server --port 8081
+    python -m src.controllers.proxy.server --port 8081
 
-The server exposes a single endpoint:
-    POST /summarize
-    Body: {"transcript": "...", "model": "haiku"}
-    Returns: {"summary": "..."}
+The server exposes endpoints:
+    GET  /health    - Health check
+    POST /summarize - Session summarization (wraps transcript in prompt)
+    POST /generate  - Raw generation pass-through
 """
 
 import argparse
@@ -36,8 +36,8 @@ Transcript:
 {transcript}"""
 
 
-class SummarizeHandler(BaseHTTPRequestHandler):
-    """HTTP request handler for summarization requests."""
+class ProxyHandler(BaseHTTPRequestHandler):
+    """HTTP request handler for proxy requests."""
 
     def log_message(self, format, *args):
         """Suppress default logging."""
@@ -179,18 +179,18 @@ def generate_with_claude(prompt: str, model: str = "haiku", max_tokens: int = 10
 
 
 def run_server(port: int = 8081):
-    """Run the summarization server."""
-    server = HTTPServer(("0.0.0.0", port), SummarizeHandler)
-    print(f"Summarizer listening on port {port}")
+    """Run the proxy server."""
+    server = HTTPServer(("0.0.0.0", port), ProxyHandler)
+    print(f"Proxy server listening on port {port}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\nSummarizer stopped")
+        print("\nProxy server stopped")
         server.shutdown()
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Cortex Summarization Proxy")
+    parser = argparse.ArgumentParser(description="Cortex Host Proxy Server")
     parser.add_argument("--port", type=int, default=8081, help="Port to listen on")
     args = parser.parse_args()
 

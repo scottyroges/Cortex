@@ -9,7 +9,7 @@ import os
 from datetime import datetime, timezone
 from typing import Callable, Optional
 
-from logging_config import get_logger
+from src.configs import get_logger
 from src.config import DB_PATH
 from src.migrations.backup import backup_database, restore_database
 

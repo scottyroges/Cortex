@@ -9,7 +9,7 @@ import os
 import time
 from typing import Optional
 
-from logging_config import get_logger
+from src.configs import get_logger
 from src.exceptions import LLMConnectionError, LLMResponseError, LLMTimeoutError
 from src.http.http_client import HTTPError, http_post
 

@@ -13,7 +13,7 @@ from typing import Any, Callable, Optional
 
 import chromadb
 
-from logging_config import get_logger
+from src.configs import get_logger
 from src.git import get_current_branch, get_git_changed_files, get_head_commit, get_untracked_files, is_git_repo
 from src.ingest.skeleton import generate_tree_structure, store_skeleton
 from src.ingest.walker import compute_file_hash, get_changed_files, walk_codebase
