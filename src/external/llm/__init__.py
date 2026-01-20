@@ -17,6 +17,14 @@ from src.configs import get_logger
 
 logger = get_logger("llm")
 
+# Registry mapping provider names to (class, config_key) tuples
+PROVIDER_REGISTRY: dict[str, tuple[type[LLMProvider], str]] = {
+    "anthropic": (AnthropicProvider, "anthropic"),
+    "claude-cli": (ClaudeCLIProvider, "claude_cli"),
+    "ollama": (OllamaProvider, "ollama"),
+    "openrouter": (OpenRouterProvider, "openrouter"),
+}
+
 __all__ = [
     "LLMProvider",
     "LLMConfig",
@@ -89,7 +97,7 @@ def get_available_providers(config: Optional[dict] = None) -> list[str]:
     llm_config = config.get("llm", {})
 
     available = []
-    for provider_name in ["anthropic", "claude-cli", "ollama", "openrouter"]:
+    for provider_name in PROVIDER_REGISTRY:
         try:
             provider = _create_provider(provider_name, llm_config)
             if provider.is_available():
@@ -102,13 +110,8 @@ def get_available_providers(config: Optional[dict] = None) -> list[str]:
 
 def _create_provider(name: str, llm_config: dict) -> LLMProvider:
     """Create a provider instance by name."""
-    if name == "anthropic":
-        return AnthropicProvider(llm_config.get("anthropic", {}))
-    elif name == "ollama":
-        return OllamaProvider(llm_config.get("ollama", {}))
-    elif name == "openrouter":
-        return OpenRouterProvider(llm_config.get("openrouter", {}))
-    elif name == "claude-cli":
-        return ClaudeCLIProvider(llm_config.get("claude_cli", {}))
-    else:
-        raise ValueError(f"Unknown provider: {name}")
+    if name not in PROVIDER_REGISTRY:
+        raise ValueError(f"Unknown provider: {name}. Valid: {list(PROVIDER_REGISTRY.keys())}")
+
+    provider_class, config_key = PROVIDER_REGISTRY[name]
+    return provider_class(llm_config.get(config_key, {}))

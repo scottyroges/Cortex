@@ -15,8 +15,7 @@ from src.exceptions import GitCommandError
 logger = get_logger("git.subprocess")
 
 
-# Re-export for backwards compatibility
-__all__ = ["GitCommandError", "run_git_command", "git_stdout", "git_stdout_or_none", "git_count_lines", "git_check"]
+__all__ = ["run_git_command", "git_check", "git_single_line", "git_count_lines", "git_list_files", "git_diff_name_status"]
 
 # Default timeout for git commands
 GIT_TIMEOUT = int(get_timeout("git_command", 10))

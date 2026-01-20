@@ -16,10 +16,11 @@ The server exposes endpoints:
 
 import argparse
 import json
-import subprocess
 import sys
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from typing import Optional
+
+from src.external.llm import ClaudeCLIProvider, LLMConfig
 
 # Default summarization prompt
 SUMMARIZE_PROMPT = """Summarize this Claude Code session transcript for future reference.
@@ -124,6 +125,18 @@ class ProxyHandler(BaseHTTPRequestHandler):
             self._send_json({"error": "Generation failed"}, 500)
 
 
+# Lazy-initialized provider instance
+_provider: Optional[ClaudeCLIProvider] = None
+
+
+def get_provider() -> ClaudeCLIProvider:
+    """Get or create the CLI provider instance."""
+    global _provider
+    if _provider is None:
+        _provider = ClaudeCLIProvider()
+    return _provider
+
+
 def summarize_with_claude(transcript: str, model: str = "haiku") -> Optional[str]:
     """
     Generate a summary using the claude CLI.
@@ -141,38 +154,21 @@ def summarize_with_claude(transcript: str, model: str = "haiku") -> Optional[str
 
 def generate_with_claude(prompt: str, model: str = "haiku", max_tokens: int = 1024) -> Optional[str]:
     """
-    Generate completion using the claude CLI (raw pass-through).
+    Generate completion using the claude CLI via ClaudeCLIProvider.
 
     Args:
         prompt: The prompt to send to Claude
         model: Model to use (haiku, sonnet, opus)
-        max_tokens: Maximum tokens to generate (not currently used - CLI uses defaults)
+        max_tokens: Maximum tokens to generate
 
     Returns:
         Generated text or None on failure
     """
     try:
-        # Note: Claude CLI doesn't support --max-tokens flag, uses its own defaults
-        result = subprocess.run(
-            ["claude", "-p", "--model", model],
-            input=prompt,
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
-
-        if result.returncode == 0:
-            return result.stdout.strip()
-        else:
-            print(f"Claude CLI error: {result.stderr}", file=sys.stderr)
-            return None
-
-    except subprocess.TimeoutExpired:
-        print("Claude CLI timed out", file=sys.stderr)
-        return None
-    except FileNotFoundError:
-        print("Claude CLI not found", file=sys.stderr)
-        return None
+        provider = get_provider()
+        config = LLMConfig(model=model, max_tokens=max_tokens, timeout=120)
+        response = provider.generate(prompt, config)
+        return response.text
     except Exception as e:
         print(f"Generation error: {e}", file=sys.stderr)
         return None

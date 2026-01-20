@@ -1222,16 +1222,18 @@ class TestProcessSyncEndpoint:
         assert result["status"] == "error"
         assert "No LLM provider" in result["error"]
 
+    @patch("src.controllers.http.api.autocapture.save_session_summary")
     @patch("src.configs.yaml_config.load_yaml_config")
     @patch("src.external.llm.get_provider")
-    def test_process_sync_success(self, mock_get_provider, mock_load_config):
+    def test_process_sync_success(self, mock_get_provider, mock_load_config, mock_save):
         """process_sync succeeds with mocked dependencies."""
-        from src.controllers.http.api import ProcessSyncRequest, process_sync, save_session_summary
+        from src.controllers.http.api import ProcessSyncRequest, process_sync
 
         mock_load_config.return_value = {}
         mock_provider = MagicMock()
         mock_provider.summarize_session.return_value = "Test summary"
         mock_get_provider.return_value = mock_provider
+        mock_save.return_value = {"status": "success", "session_id": "test-session"}
 
         request = ProcessSyncRequest(
             session_id="test-1",
@@ -1240,19 +1242,13 @@ class TestProcessSyncEndpoint:
             repository="test-repo",
         )
 
-        # Mock save_session_summary at module level
-        with patch.object(
-            __import__("src.controllers.http.api", fromlist=["save_session_summary"]),
-            "save_session_summary",
-            return_value={"status": "success", "session_id": "test-session"},
-        ) as mock_save:
-            result = process_sync(request)
+        result = process_sync(request)
 
-            assert result["status"] == "success"
-            assert result["session_id"] == "test-1"
-            assert result["summary_length"] == len("Test summary")
-            mock_provider.summarize_session.assert_called_once()
-            mock_save.assert_called_once()
+        assert result["status"] == "success"
+        assert result["session_id"] == "test-1"
+        assert result["summary_length"] == len("Test summary")
+        mock_provider.summarize_session.assert_called_once()
+        mock_save.assert_called_once()
 
     @patch("src.configs.yaml_config.load_yaml_config")
     @patch("src.external.llm.get_provider")
