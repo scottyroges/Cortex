@@ -35,7 +35,7 @@ class TestSearchCortex:
         )
 
         # Import and test search
-        from src.search import HybridSearcher, RerankerService
+        from src.tools.search import HybridSearcher, RerankerService
 
         searcher = HybridSearcher(collection)
         reranker = RerankerService()
@@ -55,7 +55,7 @@ class TestSearchCortex:
         """Test that search returns error when Cortex is disabled."""
         # This would require importing server module with mocked dependencies
         # For now, we test the config behavior
-        from src.tools.services import CONFIG
+        from src.configs.services import CONFIG
 
         CONFIG["enabled"] = False
 
@@ -68,7 +68,7 @@ class TestSearchCortex:
 
     def test_search_empty_collection(self, temp_chroma_client):
         """Test search on empty collection."""
-        from src.search import HybridSearcher
+        from src.tools.search import HybridSearcher
         from src.storage import get_or_create_collection
 
         collection = get_or_create_collection(temp_chroma_client, "empty")
@@ -84,7 +84,7 @@ class TestIngestCodeIntoCortex:
 
     def test_ingest_basic(self, temp_dir: Path, temp_chroma_client):
         """Test basic code ingestion."""
-        from src.ingest import ingest_codebase
+        from src.tools.ingest import ingest_codebase
         from src.storage import get_or_create_collection
 
         # Create test files
@@ -112,7 +112,7 @@ class TestIngestCodeIntoCortex:
 
     def test_ingest_respects_force_full(self, temp_dir: Path, temp_chroma_client):
         """Test that force_full re-ingests everything."""
-        from src.ingest import ingest_codebase
+        from src.tools.ingest import ingest_codebase
         from src.storage import get_or_create_collection
 
         (temp_dir / "main.py").write_text("def main(): pass")
@@ -149,7 +149,7 @@ class TestSessionSummaryToCortex:
         """Test that session summary saves to collection."""
         import uuid
 
-        from src.security import scrub_secrets
+        from src.utils.secret_scrubber import scrub_secrets
         from src.storage import get_or_create_collection
 
         collection = get_or_create_collection(temp_chroma_client, "session_summary_test")
@@ -185,7 +185,7 @@ class TestSaveNoteToCortex:
         """Test basic note saving."""
         import uuid
 
-        from src.security import scrub_secrets
+        from src.utils.secret_scrubber import scrub_secrets
         from src.storage import get_or_create_collection
 
         collection = get_or_create_collection(temp_chroma_client, "notes_test")
@@ -221,7 +221,7 @@ class TestSaveNoteToCortex:
         """Test that notes have secrets scrubbed."""
         import uuid
 
-        from src.security import scrub_secrets
+        from src.utils.secret_scrubber import scrub_secrets
         from src.storage import get_or_create_collection
 
         collection = get_or_create_collection(temp_chroma_client, "secret_notes")
@@ -244,7 +244,7 @@ class TestConfigureCortex:
 
     def test_configure_min_score(self):
         """Test configuring min_score."""
-        from src.tools.services import CONFIG
+        from src.configs.services import CONFIG
 
         original = CONFIG["min_score"]
 
@@ -256,7 +256,7 @@ class TestConfigureCortex:
 
     def test_configure_verbose(self):
         """Test configuring verbose mode."""
-        from src.tools.services import CONFIG
+        from src.configs.services import CONFIG
 
         original = CONFIG["verbose"]
 
@@ -271,7 +271,7 @@ class TestConfigureCortex:
 
     def test_configure_top_k_limits(self):
         """Test that top_k values are bounded."""
-        from src.tools.services import CONFIG
+        from src.configs.services import CONFIG
 
         # Test top_k_retrieve
         CONFIG["top_k_retrieve"] = max(10, min(200, 5))  # Below min
@@ -295,7 +295,7 @@ class TestConfigureEnabled:
         import json
 
         from src.tools import configure_cortex
-        from src.tools.services import CONFIG
+        from src.configs.services import CONFIG
 
         # Enable first
         CONFIG["enabled"] = True
@@ -310,7 +310,7 @@ class TestConfigureEnabled:
         import json
 
         from src.tools import configure_cortex
-        from src.tools.services import CONFIG
+        from src.configs.services import CONFIG
 
         # Disable first
         CONFIG["enabled"] = False
@@ -328,7 +328,7 @@ class TestContextTools:
         """Test that set_repo_context saves tech stack context."""
         from datetime import datetime, timezone
 
-        from src.security import scrub_secrets
+        from src.utils.secret_scrubber import scrub_secrets
         from src.storage import get_or_create_collection
 
         collection = get_or_create_collection(temp_chroma_client, "context_test")
@@ -360,7 +360,7 @@ class TestContextTools:
         """Test that set_initiative saves initiative name and status."""
         from datetime import datetime, timezone
 
-        from src.security import scrub_secrets
+        from src.utils.secret_scrubber import scrub_secrets
         from src.storage import get_or_create_collection
 
         collection = get_or_create_collection(temp_chroma_client, "context_test2")
@@ -493,7 +493,7 @@ class TestContextTools:
         """Test that context has secrets scrubbed."""
         from datetime import datetime, timezone
 
-        from src.security import scrub_secrets
+        from src.utils.secret_scrubber import scrub_secrets
         from src.storage import get_or_create_collection
 
         collection = get_or_create_collection(temp_chroma_client, "context_secrets")
@@ -649,7 +649,7 @@ class TestContextTools:
         """Test setting initiative with name only (no status)."""
         from datetime import datetime, timezone
 
-        from src.security import scrub_secrets
+        from src.utils.secret_scrubber import scrub_secrets
         from src.storage import get_or_create_collection
 
         collection = get_or_create_collection(temp_chroma_client, "initiative_name_only")
@@ -683,7 +683,7 @@ class TestContextTools:
         """Test that set_initiative overwrites existing status."""
         from datetime import datetime, timezone
 
-        from src.security import scrub_secrets
+        from src.utils.secret_scrubber import scrub_secrets
         from src.storage import get_or_create_collection
 
         collection = get_or_create_collection(temp_chroma_client, "update_status")
@@ -734,8 +734,8 @@ class TestIntegration:
 
     def test_full_workflow(self, temp_dir: Path, temp_chroma_client):
         """Test complete ingest -> search workflow."""
-        from src.ingest import ingest_codebase
-        from src.search import HybridSearcher, RerankerService
+        from src.tools.ingest import ingest_codebase
+        from src.tools.search import HybridSearcher, RerankerService
         from src.storage import get_or_create_collection
 
         # Create test codebase
@@ -799,7 +799,7 @@ def validate_input(value):
         """Test that saved notes are searchable."""
         import uuid
 
-        from src.search import HybridSearcher, RerankerService
+        from src.tools.search import HybridSearcher, RerankerService
         from src.storage import get_or_create_collection
 
         collection = get_or_create_collection(temp_chroma_client, "notes_search")
@@ -834,7 +834,7 @@ class TestBranchAwareFilter:
 
     def test_filter_with_project_and_branches(self):
         """Test filter construction with project and branch list."""
-        from src.tools.search import build_branch_aware_filter
+        from src.tools.search.search import build_branch_aware_filter
 
         result = build_branch_aware_filter(repository="myproject", branches=["feature-x", "main"])
 
@@ -858,7 +858,7 @@ class TestBranchAwareFilter:
 
     def test_filter_with_unknown_branch(self):
         """Test that unknown branch returns simple project filter."""
-        from src.tools.search import build_branch_aware_filter
+        from src.tools.search.search import build_branch_aware_filter
 
         result = build_branch_aware_filter(repository="myproject", branches=["unknown"])
 
@@ -867,7 +867,7 @@ class TestBranchAwareFilter:
 
     def test_filter_with_no_branches(self):
         """Test that empty branches returns simple project filter."""
-        from src.tools.search import build_branch_aware_filter
+        from src.tools.search.search import build_branch_aware_filter
 
         result = build_branch_aware_filter(repository="myproject", branches=None)
         assert result == {"repository": "myproject"}
@@ -877,7 +877,7 @@ class TestBranchAwareFilter:
 
     def test_filter_without_project(self):
         """Test filter with branches but no project."""
-        from src.tools.search import build_branch_aware_filter
+        from src.tools.search.search import build_branch_aware_filter
 
         result = build_branch_aware_filter(repository=None, branches=["main"])
 
@@ -890,7 +890,7 @@ class TestBranchAwareFilter:
 
     def test_filter_returns_none_when_no_filters(self):
         """Test that no project and unknown branch returns None."""
-        from src.tools.search import build_branch_aware_filter
+        from src.tools.search.search import build_branch_aware_filter
 
         result = build_branch_aware_filter(repository=None, branches=["unknown"])
         assert result is None
@@ -900,7 +900,8 @@ class TestBranchAwareFilter:
 
     def test_filter_code_types_filtered_by_branch(self):
         """Test that branch-filtered types (code, skeleton, etc.) are in the branch-filtered clause."""
-        from src.tools.search import build_branch_aware_filter, BRANCH_FILTERED_TYPES
+        from src.tools.search.search import build_branch_aware_filter
+        from src.models.documents import BRANCH_FILTERED_TYPES
 
         result = build_branch_aware_filter(repository=None, branches=["feature", "main"])
 
@@ -929,7 +930,7 @@ class TestBranchAwareFilter:
 
     def test_filter_non_code_types_not_filtered(self):
         """Test that note, session_summary, tech_stack, initiative, insight are not branch-filtered."""
-        from src.tools.search import build_branch_aware_filter
+        from src.tools.search.search import build_branch_aware_filter
 
         result = build_branch_aware_filter(repository=None, branches=["feature", "main"])
 
@@ -954,20 +955,20 @@ class TestGetRepoPath:
 
     def test_returns_path_in_git_repo(self, temp_git_repo: Path):
         """Test that get_repo_path returns cwd when in a git repo."""
-        from src.tools.services import get_repo_path
+        from src.configs.services import get_repo_path
 
         # Mock os.getcwd to return our temp git repo
-        with patch("src.tools.services.os.getcwd", return_value=str(temp_git_repo)):
+        with patch("src.configs.services.os.getcwd", return_value=str(temp_git_repo)):
             result = get_repo_path()
 
         assert result == str(temp_git_repo)
 
     def test_returns_none_in_non_git_dir(self, temp_dir: Path):
         """Test that get_repo_path returns None when not in a git repo."""
-        from src.tools.services import get_repo_path
+        from src.configs.services import get_repo_path
 
         # Mock os.getcwd to return our non-git temp dir
-        with patch("src.tools.services.os.getcwd", return_value=str(temp_dir)):
+        with patch("src.configs.services.os.getcwd", return_value=str(temp_dir)):
             result = get_repo_path()
 
         assert result is None
@@ -978,9 +979,9 @@ class TestBranchAwareSearch:
 
     def test_code_filtered_by_branch(self, temp_chroma_client):
         """Test that code chunks are filtered by branch."""
-        from src.search import HybridSearcher
+        from src.tools.search import HybridSearcher
         from src.storage import get_or_create_collection
-        from src.tools.search import build_branch_aware_filter
+        from src.tools.search.search import build_branch_aware_filter
 
         collection = get_or_create_collection(temp_chroma_client, "branch_test")
 
@@ -1012,9 +1013,9 @@ class TestBranchAwareSearch:
 
     def test_notes_not_filtered_by_branch(self, temp_chroma_client):
         """Test that notes are visible from any branch."""
-        from src.search import HybridSearcher
+        from src.tools.search import HybridSearcher
         from src.storage import get_or_create_collection
-        from src.tools.search import build_branch_aware_filter
+        from src.tools.search.search import build_branch_aware_filter
 
         collection = get_or_create_collection(temp_chroma_client, "notes_branch_test")
 
@@ -1042,9 +1043,9 @@ class TestBranchAwareSearch:
 
     def test_session_summaries_not_filtered_by_branch(self, temp_chroma_client):
         """Test that session summaries are visible from any branch."""
-        from src.search import HybridSearcher
+        from src.tools.search import HybridSearcher
         from src.storage import get_or_create_collection
-        from src.tools.search import build_branch_aware_filter
+        from src.tools.search.search import build_branch_aware_filter
 
         collection = get_or_create_collection(temp_chroma_client, "session_summaries_branch_test")
 
@@ -1072,9 +1073,9 @@ class TestBranchAwareSearch:
 
     def test_code_on_other_branch_excluded(self, temp_chroma_client):
         """Test that code on unrelated branches is excluded."""
-        from src.search import HybridSearcher
+        from src.tools.search import HybridSearcher
         from src.storage import get_or_create_collection
-        from src.tools.search import build_branch_aware_filter
+        from src.tools.search.search import build_branch_aware_filter
 
         collection = get_or_create_collection(temp_chroma_client, "exclude_branch_test")
 
@@ -1103,9 +1104,9 @@ class TestBranchAwareSearch:
 
     def test_main_branch_included_from_feature_branch(self, temp_chroma_client):
         """Test that main branch code is included when searching from feature branch."""
-        from src.search import HybridSearcher
+        from src.tools.search import HybridSearcher
         from src.storage import get_or_create_collection
-        from src.tools.search import build_branch_aware_filter
+        from src.tools.search.search import build_branch_aware_filter
 
         collection = get_or_create_collection(temp_chroma_client, "main_included_test")
 
@@ -1137,9 +1138,9 @@ class TestTypeFilter:
 
     def test_filter_single_type_notes_only(self, temp_chroma_client):
         """Test filtering to only return notes."""
-        from src.search import HybridSearcher
+        from src.tools.search import HybridSearcher
         from src.storage import get_or_create_collection
-        from src.tools.search import build_branch_aware_filter
+        from src.tools.search.search import build_branch_aware_filter
 
         collection = get_or_create_collection(temp_chroma_client, "type_filter_notes")
 
@@ -1171,9 +1172,9 @@ class TestTypeFilter:
 
     def test_filter_multiple_types(self, temp_chroma_client):
         """Test filtering to return multiple types (note + insight)."""
-        from src.search import HybridSearcher
+        from src.tools.search import HybridSearcher
         from src.storage import get_or_create_collection
-        from src.tools.search import build_branch_aware_filter
+        from src.tools.search.search import build_branch_aware_filter
 
         collection = get_or_create_collection(temp_chroma_client, "type_filter_multiple")
 
@@ -1207,9 +1208,9 @@ class TestTypeFilter:
 
     def test_filter_code_type_with_branch(self, temp_chroma_client):
         """Test that code type filter respects branch filtering."""
-        from src.search import HybridSearcher
+        from src.tools.search import HybridSearcher
         from src.storage import get_or_create_collection
-        from src.tools.search import build_branch_aware_filter
+        from src.tools.search.search import build_branch_aware_filter
 
         collection = get_or_create_collection(temp_chroma_client, "type_filter_code_branch")
 
@@ -1242,9 +1243,9 @@ class TestTypeFilter:
 
     def test_filter_mixed_branch_and_non_branch_types(self, temp_chroma_client):
         """Test filtering with both branch-filtered (code) and non-branch (note) types."""
-        from src.search import HybridSearcher
+        from src.tools.search import HybridSearcher
         from src.storage import get_or_create_collection
-        from src.tools.search import build_branch_aware_filter
+        from src.tools.search.search import build_branch_aware_filter
 
         collection = get_or_create_collection(temp_chroma_client, "type_filter_mixed")
 
@@ -1283,9 +1284,9 @@ class TestTypeFilter:
 
     def test_filter_empty_types_no_filter(self, temp_chroma_client):
         """Test that empty types list behaves as no filter."""
-        from src.search import HybridSearcher
+        from src.tools.search import HybridSearcher
         from src.storage import get_or_create_collection
-        from src.tools.search import build_branch_aware_filter
+        from src.tools.search.search import build_branch_aware_filter
 
         collection = get_or_create_collection(temp_chroma_client, "type_filter_empty")
 
@@ -1314,7 +1315,7 @@ class TestTypeFilter:
 
     def test_filter_none_types_no_filter(self):
         """Test that types=None behaves as no type filter."""
-        from src.tools.search import build_branch_aware_filter
+        from src.tools.search.search import build_branch_aware_filter
 
         # With types=None, should fall back to standard branch filtering
         result = build_branch_aware_filter(repository="test", branches=["main"], types=None)
@@ -1325,16 +1326,16 @@ class TestTypeFilter:
 
     def test_invalid_types_filtered_out(self):
         """Test that invalid types are filtered out with warning."""
-        from src.documents import ALL_DOCUMENT_TYPES
-        from src.tools.search import search_cortex
+        from src.models.documents import ALL_DOCUMENT_TYPES
+        from src.tools.search.search import search_cortex
         import json
         from unittest.mock import patch, MagicMock
 
         # Mock the dependencies
-        with patch("src.tools.search.get_collection") as mock_collection, \
-             patch("src.tools.search.get_searcher") as mock_searcher, \
-             patch("src.tools.search.get_reranker") as mock_reranker, \
-             patch("src.tools.search.CONFIG", {"enabled": True, "top_k_retrieve": 50, "top_k_rerank": 10, "min_score": 0.0, "recency_boost": False, "verbose": False}):
+        with patch("src.tools.search.search.get_collection") as mock_collection, \
+             patch("src.tools.search.search.get_searcher") as mock_searcher, \
+             patch("src.tools.search.search.get_reranker") as mock_reranker, \
+             patch("src.tools.search.search.CONFIG", {"enabled": True, "top_k_retrieve": 50, "top_k_rerank": 10, "min_score": 0.0, "recency_boost": False, "verbose": False}):
 
             mock_collection.return_value = MagicMock()
             mock_searcher.return_value.search.return_value = []
@@ -1352,7 +1353,7 @@ class TestTypeFilter:
 
     def test_build_filter_types_only_non_branch(self):
         """Test filter with only non-branch types doesn't include branch clause."""
-        from src.tools.search import build_branch_aware_filter
+        from src.tools.search.search import build_branch_aware_filter
 
         # Only notes and insights (non-branch types)
         result = build_branch_aware_filter(
@@ -1377,7 +1378,7 @@ class TestTypeFilter:
 
     def test_build_filter_types_only_branch_filtered(self):
         """Test filter with only branch-filtered types (code, skeleton)."""
-        from src.tools.search import build_branch_aware_filter
+        from src.tools.search.search import build_branch_aware_filter
 
         result = build_branch_aware_filter(
             repository="test",

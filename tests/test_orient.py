@@ -19,7 +19,7 @@ class TestOrientSession:
         """Test orient_session on an unindexed project."""
         from src.tools.orient import orient_session
 
-        with patch("src.tools.orient.get_collection") as mock_collection:
+        with patch("src.tools.orient.orient.get_collection") as mock_collection:
             # Empty collection - no file_metadata docs
             mock_collection.return_value.get.return_value = {
                 "ids": [],
@@ -44,7 +44,7 @@ class TestOrientSession:
         project_name = temp_git_repo.name
         indexed_at = datetime.now(timezone.utc).isoformat()
 
-        with patch("src.tools.orient.get_collection") as mock_collection:
+        with patch("src.tools.orient.orient.get_collection") as mock_collection:
             # Create mock collection that responds correctly to different queries
             def mock_get(**kwargs):
                 # Check for is_indexed (limit=1 file_metadata query)
@@ -93,8 +93,8 @@ class TestOrientSession:
         project_name = temp_git_repo.name
         indexed_at = datetime.now(timezone.utc).isoformat()
 
-        with patch("src.tools.orient.get_collection") as mock_collection, \
-             patch("src.tools.orient.get_current_branch") as mock_branch:
+        with patch("src.tools.orient.orient.get_collection") as mock_collection, \
+             patch("src.tools.orient.orient.get_current_branch") as mock_branch:
 
             # Current branch is 'feature' but indexed on 'main'
             mock_branch.return_value = "feature"
@@ -136,8 +136,8 @@ class TestOrientSession:
         project_name = temp_git_repo.name
         indexed_at = datetime.now(timezone.utc).isoformat()
 
-        with patch("src.tools.orient.get_collection") as mock_collection, \
-             patch("src.tools.orient.get_commits_since") as mock_commits:
+        with patch("src.tools.orient.orient.get_collection") as mock_collection, \
+             patch("src.tools.orient.orient.get_commits_since") as mock_commits:
 
             mock_commits.return_value = 5  # 5 new commits
 
@@ -178,9 +178,9 @@ class TestOrientSession:
         project_name = temp_git_repo.name
         indexed_at = datetime.now(timezone.utc).isoformat()
 
-        with patch("src.tools.orient.get_collection") as mock_collection, \
-             patch("src.tools.orient.get_commits_since") as mock_commits, \
-             patch("src.tools.orient.count_tracked_files") as mock_count:
+        with patch("src.tools.orient.orient.get_collection") as mock_collection, \
+             patch("src.tools.orient.orient.get_commits_since") as mock_commits, \
+             patch("src.tools.orient.orient.count_tracked_files") as mock_count:
 
             mock_commits.return_value = 0
             mock_count.return_value = 20  # Now 20 files (diff > 5 threshold)
@@ -222,7 +222,7 @@ class TestOrientSession:
         project_name = temp_git_repo.name
         indexed_at = datetime.now(timezone.utc).isoformat()
 
-        with patch("src.tools.orient.get_collection") as mock_collection:
+        with patch("src.tools.orient.orient.get_collection") as mock_collection:
 
             def mock_get(**kwargs):
                 # is_indexed check
@@ -260,7 +260,7 @@ class TestOrientSession:
         tech_stack_content = "Python, FastAPI, PostgreSQL"
         indexed_at = datetime.now(timezone.utc).isoformat()
 
-        with patch("src.tools.orient.get_collection") as mock_collection:
+        with patch("src.tools.orient.orient.get_collection") as mock_collection:
 
             def mock_get(**kwargs):
                 # is_indexed check
@@ -303,7 +303,7 @@ class TestOrientSession:
         project_name = temp_git_repo.name
         indexed_at = datetime.now(timezone.utc).isoformat()
 
-        with patch("src.tools.orient.get_collection") as mock_collection:
+        with patch("src.tools.orient.orient.get_collection") as mock_collection:
 
             def mock_get(**kwargs):
                 # is_indexed check
@@ -347,7 +347,7 @@ class TestOrientSession:
         """Test that orient_session handles errors gracefully."""
         from src.tools.orient import orient_session
 
-        with patch("src.tools.orient.get_collection") as mock_collection:
+        with patch("src.tools.orient.orient.get_collection") as mock_collection:
             mock_collection.side_effect = Exception("Database connection failed")
 
             result = json.loads(orient_session(str(temp_git_repo)))
@@ -393,7 +393,7 @@ class TestGitStalenessDetection:
 
     def test_get_commits_since(self, temp_git_repo: Path):
         """Test counting commits since a commit hash."""
-        from src.git.detection import get_commits_since
+        from src.external.git.detection import get_commits_since
 
         # Get the initial commit hash before adding new commits
         initial_commit = self._get_head_commit(temp_git_repo)
@@ -415,7 +415,7 @@ class TestGitStalenessDetection:
 
     def test_get_commits_since_no_new_commits(self, temp_git_repo: Path):
         """Test counting commits when there are none since the commit."""
-        from src.git.detection import get_commits_since
+        from src.external.git.detection import get_commits_since
 
         # Get the current HEAD - there should be no commits after it
         current_commit = self._get_head_commit(temp_git_repo)
@@ -425,7 +425,7 @@ class TestGitStalenessDetection:
 
     def test_get_merge_commits_since(self, temp_git_repo: Path):
         """Test counting merge commits since a commit hash."""
-        from src.git.detection import get_merge_commits_since
+        from src.external.git.detection import get_merge_commits_since
 
         # Get the commit hash before creating the merge
         before_commit = self._get_head_commit(temp_git_repo)
@@ -463,7 +463,7 @@ class TestGitStalenessDetection:
 
     def test_count_tracked_files(self, temp_git_repo: Path):
         """Test counting tracked files."""
-        from src.git.detection import count_tracked_files
+        from src.external.git.detection import count_tracked_files
 
         # Initial repo has README.md
         initial_count = count_tracked_files(str(temp_git_repo))
@@ -485,14 +485,14 @@ class TestGitStalenessDetection:
 
     def test_count_tracked_files_non_git_dir(self, temp_dir: Path):
         """Test count_tracked_files returns 0 for non-git directory."""
-        from src.git.detection import count_tracked_files
+        from src.external.git.detection import count_tracked_files
 
         count = count_tracked_files(str(temp_dir))
         assert count == 0
 
     def test_get_commits_since_non_git_dir(self, temp_dir: Path):
         """Test get_commits_since returns 0 for non-git directory."""
-        from src.git.detection import get_commits_since
+        from src.external.git.detection import get_commits_since
 
         # Use a fake commit hash - should return 0 for non-git dir regardless
         count = get_commits_since(str(temp_dir), "abc123")

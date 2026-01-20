@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.autocapture.transcript import (
+from src.tools.autocapture.transcript import (
     ContentBlockParser,
     ContentBlockResult,
     LegacyFormatHandler,
@@ -25,7 +25,7 @@ from src.autocapture.transcript import (
     parse_transcript_file,
     parse_transcript_jsonl,
 )
-from src.autocapture.significance import (
+from src.tools.autocapture.significance import (
     DEFAULT_CONFIG,
     SignificanceConfig,
     SignificanceResult,
@@ -744,7 +744,7 @@ class TestQueueProcessor:
 
     def test_start_stop(self):
         """Processor starts and stops cleanly."""
-        from src.autocapture.queue_processor import QueueProcessor
+        from src.tools.autocapture.queue_processor import QueueProcessor
 
         processor = QueueProcessor()
         processor.start()
@@ -755,7 +755,7 @@ class TestQueueProcessor:
 
     def test_start_idempotent(self):
         """Starting twice doesn't create duplicate threads."""
-        from src.autocapture.queue_processor import QueueProcessor
+        from src.tools.autocapture.queue_processor import QueueProcessor
 
         processor = QueueProcessor()
         processor.start()
@@ -766,7 +766,7 @@ class TestQueueProcessor:
 
     def test_trigger_processing(self):
         """trigger_processing sets the event."""
-        from src.autocapture.queue_processor import QueueProcessor
+        from src.tools.autocapture.queue_processor import QueueProcessor
 
         processor = QueueProcessor()
         processor.start()
@@ -775,20 +775,20 @@ class TestQueueProcessor:
         # Event should be set (briefly, until consumed)
         processor.stop()
 
-    @patch("src.autocapture.queue_processor.QUEUE_FILE")
+    @patch("src.tools.autocapture.queue_processor.QUEUE_FILE")
     def test_process_queue_empty(self, mock_queue_file):
         """Empty queue doesn't cause errors."""
-        from src.autocapture.queue_processor import QueueProcessor
+        from src.tools.autocapture.queue_processor import QueueProcessor
 
         mock_queue_file.exists.return_value = False
 
         processor = QueueProcessor()
         processor._process_queue()  # Should not raise
 
-    @patch("src.autocapture.queue_processor.QUEUE_FILE")
+    @patch("src.tools.autocapture.queue_processor.QUEUE_FILE")
     def test_process_queue_with_items(self, mock_queue_file):
         """Queue items are processed."""
-        from src.autocapture.queue_processor import QueueProcessor
+        from src.tools.autocapture.queue_processor import QueueProcessor
 
         # Create a temp file with queue data
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
@@ -820,14 +820,14 @@ class TestQueueProcessor:
             if temp_path.exists():
                 temp_path.unlink()
 
-    @patch("src.config.load_yaml_config")
-    @patch("src.llm.get_provider")
+    @patch("src.configs.config.load_yaml_config")
+    @patch("src.external.llm.get_provider")
     @patch("src.tools.notes.conclude_session")
     def test_process_session_success(
         self, mock_conclude_session, mock_get_provider, mock_load_config
     ):
         """Session processing succeeds with mocked dependencies."""
-        from src.autocapture.queue_processor import QueueProcessor
+        from src.tools.autocapture.queue_processor import QueueProcessor
 
         # Setup mocks
         mock_load_config.return_value = {}
@@ -850,11 +850,11 @@ class TestQueueProcessor:
         mock_provider.summarize_session.assert_called_once()
         mock_conclude_session.assert_called_once()
 
-    @patch("src.config.load_yaml_config")
-    @patch("src.llm.get_provider")
+    @patch("src.configs.config.load_yaml_config")
+    @patch("src.external.llm.get_provider")
     def test_process_session_no_provider(self, mock_get_provider, mock_load_config):
         """Session returns False when no LLM provider available."""
-        from src.autocapture.queue_processor import QueueProcessor
+        from src.tools.autocapture.queue_processor import QueueProcessor
 
         mock_load_config.return_value = {}
         mock_get_provider.side_effect = Exception("No provider")
@@ -872,7 +872,7 @@ class TestQueueProcessor:
 
     def test_process_session_empty_transcript(self):
         """Empty transcript is considered 'processed' (removed from queue)."""
-        from src.autocapture.queue_processor import QueueProcessor
+        from src.tools.autocapture.queue_processor import QueueProcessor
 
         processor = QueueProcessor()
         session = {
@@ -896,7 +896,7 @@ class TestQueueProcessorModuleFunctions:
 
     def test_get_processor_singleton(self):
         """get_processor returns same instance."""
-        from src.autocapture import queue_processor
+        from src.tools.autocapture import queue_processor
 
         # Reset global state
         queue_processor._processor = None
@@ -910,7 +910,7 @@ class TestQueueProcessorModuleFunctions:
 
     def test_start_stop_processor(self):
         """start_processor and stop_processor work."""
-        from src.autocapture import queue_processor
+        from src.tools.autocapture import queue_processor
 
         # Reset global state
         queue_processor._processor = None
@@ -927,7 +927,7 @@ class TestQueueProcessorModuleFunctions:
 
     def test_trigger_processing_no_processor(self):
         """trigger_processing is safe when processor not started."""
-        from src.autocapture import queue_processor
+        from src.tools.autocapture import queue_processor
 
         # Reset global state
         queue_processor._processor = None
@@ -946,32 +946,32 @@ class TestSyncAsyncConfig:
 
     def test_default_config_async_true(self):
         """Default config has auto_commit_async=True."""
-        from src.config import DEFAULT_CONFIG_YAML
+        from src.configs.config import DEFAULT_CONFIG_YAML
 
         assert "auto_commit_async: true" in DEFAULT_CONFIG_YAML
 
     def test_default_config_sync_timeout(self):
         """Default config has sync_timeout=60."""
-        from src.config import DEFAULT_CONFIG_YAML
+        from src.configs.config import DEFAULT_CONFIG_YAML
 
         assert "sync_timeout: 60" in DEFAULT_CONFIG_YAML
 
     def test_configure_cortex_get_status_includes_autocapture(self):
         """configure_cortex(get_status=True) includes autocapture config."""
-        from src.tools.admin import configure_cortex
+        from src.tools.configure.admin import configure_cortex
 
         status = json.loads(configure_cortex(get_status=True))
         assert "autocapture" in status
         assert "config" in status["autocapture"]
 
-    @patch("src.config.load_yaml_config")
-    @patch("src.config.save_yaml_config")
-    @patch("src.config.create_default_config")
+    @patch("src.configs.config.load_yaml_config")
+    @patch("src.configs.config.save_yaml_config")
+    @patch("src.configs.config.create_default_config")
     def test_configure_cortex_autocapture_async_setting(
         self, mock_create, mock_save, mock_load
     ):
         """configure_cortex can set autocapture_async."""
-        from src.tools.admin import configure_cortex
+        from src.tools.configure.admin import configure_cortex
 
         mock_load.return_value = {"autocapture": {"significance": {}}, "llm": {}}
         mock_save.return_value = True
@@ -1014,8 +1014,8 @@ class TestProcessSyncEndpoint:
 
         assert result["status"] == "skipped"
 
-    @patch("src.config.load_yaml_config")
-    @patch("src.llm.get_provider")
+    @patch("src.configs.config.load_yaml_config")
+    @patch("src.external.llm.get_provider")
     def test_process_sync_no_provider(self, mock_get_provider, mock_load_config):
         """process_sync returns error when no LLM provider."""
         from src.controllers.http.api import ProcessSyncRequest, process_sync
@@ -1034,8 +1034,8 @@ class TestProcessSyncEndpoint:
         assert result["status"] == "error"
         assert "No LLM provider" in result["error"]
 
-    @patch("src.config.load_yaml_config")
-    @patch("src.llm.get_provider")
+    @patch("src.configs.config.load_yaml_config")
+    @patch("src.external.llm.get_provider")
     def test_process_sync_success(self, mock_get_provider, mock_load_config):
         """process_sync succeeds with mocked dependencies."""
         from src.controllers.http.api import ProcessSyncRequest, process_sync, save_session_summary
@@ -1066,8 +1066,8 @@ class TestProcessSyncEndpoint:
             mock_provider.summarize_session.assert_called_once()
             mock_save.assert_called_once()
 
-    @patch("src.config.load_yaml_config")
-    @patch("src.llm.get_provider")
+    @patch("src.configs.config.load_yaml_config")
+    @patch("src.external.llm.get_provider")
     def test_process_sync_summarization_error(
         self, mock_get_provider, mock_load_config
     ):

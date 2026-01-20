@@ -84,7 +84,7 @@ mcp.tool()(delete_document)
 
 def start_http_server():
     """Start the FastAPI HTTP server in a background thread."""
-    from src.http import run_server
+    from src.controllers.http import run_server
     http_thread = threading.Thread(target=run_server, daemon=True)
     http_thread.start()
     logger.info("HTTP server started on port 8080")
@@ -99,7 +99,7 @@ def start_queue_processor():
 
 def start_ingestion_worker():
     """Start the async ingestion worker in a background thread."""
-    from src.ingest.async_processor import start_worker
+    from src.tools.ingest.async_processor import start_worker
     start_worker()
     logger.info("Ingestion worker started")
 

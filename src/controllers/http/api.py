@@ -15,9 +15,9 @@ from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
 from src.configs import get_logger
-from src.config import get_data_path
-from src.http.resources import get_collection, get_reranker, get_searcher
-from src.security import scrub_secrets
+from src.configs.config import get_data_path
+from src.configs.resource_manager import get_collection, get_reranker, get_searcher
+from src.utils.secret_scrubber import scrub_secrets
 
 logger = get_logger("http.api")
 
@@ -222,7 +222,7 @@ def info() -> dict[str, str]:
     Returns git commit, build time, and startup time for verifying
     the daemon is running the expected code version.
     """
-    from src.http import get_startup_time
+    from src.controllers.http import get_startup_time
 
     return {
         "git_commit": os.environ.get("CORTEX_GIT_COMMIT", "unknown"),
@@ -242,7 +242,7 @@ def migrations_status() -> dict[str, Any]:
 
     Returns schema version info and whether migrations are needed.
     """
-    from src.migrations import (
+    from src.storage.migrations import (
         SCHEMA_VERSION,
         get_current_schema_version,
         needs_migration,
@@ -263,7 +263,7 @@ def create_backup(label: Optional[str] = None) -> dict[str, Any]:
     Args:
         label: Optional label for the backup
     """
-    from src.migrations import backup_database
+    from src.storage.migrations import backup_database
 
     try:
         backup_path = backup_database(label=label or "manual")
@@ -282,7 +282,7 @@ def create_backup(label: Optional[str] = None) -> dict[str, Any]:
 @router.get("/admin/backups")
 def get_backups() -> dict[str, Any]:
     """List available backups."""
-    from src.migrations import list_backups
+    from src.storage.migrations import list_backups
 
     return {
         "backups": list_backups(),
@@ -459,8 +459,8 @@ def process_sync(request: ProcessSyncRequest) -> dict[str, Any]:
     Returns:
         Result with status, summary length, and commit info
     """
-    from src.config import load_yaml_config
-    from src.llm import get_provider
+    from src.configs.config import load_yaml_config
+    from src.external.llm import get_provider
 
     logger.info(f"Processing session synchronously: {request.session_id}")
 
@@ -520,7 +520,7 @@ def list_ingest_tasks(repository: Optional[str] = None) -> dict[str, Any]:
     Args:
         repository: Optional filter by repository name
     """
-    from src.ingest.async_processor import get_worker
+    from src.tools.ingest.async_processor import get_worker
 
     worker = get_worker()
     tasks = worker._store.get_all_tasks(repository=repository)
@@ -557,7 +557,7 @@ def get_ingest_task_status(task_id: str) -> dict[str, Any]:
     Args:
         task_id: Task ID from ingest_code_into_cortex
     """
-    from src.ingest.async_processor import get_worker
+    from src.tools.ingest.async_processor import get_worker
 
     worker = get_worker()
     status = worker.get_status(task_id)

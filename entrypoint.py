@@ -19,7 +19,7 @@ def main():
         # Run HTTP server as daemon
         import os
         from src.configs import get_logger, setup_logging
-        from src.http import run_server
+        from src.controllers.http import run_server
         from src.autocapture import start_processor
         from src.ingest.async_processor import start_worker as start_ingestion_worker
 
@@ -29,7 +29,7 @@ def main():
 
         # Check and run migrations before starting server
         try:
-            from src.migrations import needs_migration, run_migrations, backup_database
+            from src.storage.migrations import needs_migration, run_migrations, backup_database
 
             if needs_migration():
                 logger.info("Schema migration required")

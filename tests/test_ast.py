@@ -6,7 +6,7 @@ Tests tree-sitter parsing and language extractors.
 
 import pytest
 
-from src.ast.models import (
+from src.tools.ingest.ast.models import (
     ClassInfo,
     DataContractInfo,
     FieldInfo,
@@ -15,7 +15,7 @@ from src.ast.models import (
     ImportInfo,
     ParameterInfo,
 )
-from src.ast.parser import ASTParser, get_parser, EXTENSION_TO_LANGUAGE
+from src.tools.ingest.ast.parser import ASTParser, get_parser, EXTENSION_TO_LANGUAGE
 
 
 # =============================================================================
@@ -276,8 +276,8 @@ class TestImportInfo:
 # =============================================================================
 
 # Import after models to avoid circular imports
-from src.ast.extractors.python import PythonExtractor
-from src.ast.extractors.base import get_extractor
+from src.tools.ingest.ast.extractors.python import PythonExtractor
+from src.tools.ingest.ast.extractors.base import get_extractor
 
 
 class TestPythonExtractorImports:
@@ -688,13 +688,13 @@ class TestExtractorRegistry:
 # =============================================================================
 
 from unittest.mock import Mock, patch
-from src.ast.description import (
+from src.tools.ingest.ast.description import (
     generate_description,
     generate_description_from_metadata,
     _fallback_description,
     DESCRIPTION_PROMPT,
 )
-from src.llm import LLMResponse
+from src.external.llm import LLMResponse
 
 
 class TestFallbackDescription:
@@ -856,7 +856,7 @@ class TestDescriptionPrompt:
 # Phase 4: TypeScript Extractor Tests
 # =============================================================================
 
-from src.ast.extractors.typescript import TypeScriptExtractor
+from src.tools.ingest.ast.extractors.typescript import TypeScriptExtractor
 
 
 class TestTypeScriptExtractorImports:
@@ -1209,7 +1209,7 @@ class TestTypeScriptExtractorRegistry:
 # Phase 5: Kotlin Extractor Tests
 # =============================================================================
 
-from src.ast.extractors.kotlin import KotlinExtractor
+from src.tools.ingest.ast.extractors.kotlin import KotlinExtractor
 
 
 class TestKotlinExtractorImports:

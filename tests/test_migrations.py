@@ -31,22 +31,22 @@ class TestSchemaVersioning:
 
     def test_get_schema_version_no_file(self, temp_data_dir):
         """Test schema version returns 0 when file doesn't exist."""
-        from src.migrations.runner import get_current_schema_version
+        from src.storage.migrations.runner import get_current_schema_version
 
-        with patch("src.migrations.runner.DB_PATH", str(Path(temp_data_dir) / "db")):
+        with patch("src.storage.migrations.runner.DB_PATH", str(Path(temp_data_dir) / "db")):
             version = get_current_schema_version()
             assert version == 0
 
     def test_save_and_load_schema_version(self, temp_data_dir):
         """Test saving and loading schema version."""
-        from src.migrations.runner import (
+        from src.storage.migrations.runner import (
             get_current_schema_version,
             save_schema_version,
         )
 
         db_path = str(Path(temp_data_dir) / "db")
 
-        with patch("src.migrations.runner.DB_PATH", db_path):
+        with patch("src.storage.migrations.runner.DB_PATH", db_path):
             save_schema_version(5)
             assert get_current_schema_version() == 5
 
@@ -59,9 +59,9 @@ class TestSchemaVersioning:
 
     def test_needs_migration_true(self, temp_data_dir):
         """Test needs_migration returns True when version is behind."""
-        from src.migrations.runner import needs_migration, SCHEMA_VERSION
+        from src.storage.migrations.runner import needs_migration, SCHEMA_VERSION
 
-        with patch("src.migrations.runner.get_current_schema_version") as mock_version:
+        with patch("src.storage.migrations.runner.get_current_schema_version") as mock_version:
             mock_version.return_value = 0
             assert needs_migration() is True
 
@@ -70,9 +70,9 @@ class TestSchemaVersioning:
 
     def test_needs_migration_false(self, temp_data_dir):
         """Test needs_migration returns False when up to date."""
-        from src.migrations.runner import needs_migration, SCHEMA_VERSION
+        from src.storage.migrations.runner import needs_migration, SCHEMA_VERSION
 
-        with patch("src.migrations.runner.get_current_schema_version") as mock_version:
+        with patch("src.storage.migrations.runner.get_current_schema_version") as mock_version:
             mock_version.return_value = SCHEMA_VERSION
             assert needs_migration() is False
 
@@ -82,9 +82,9 @@ class TestMigrationRunner:
 
     def test_run_migrations_already_up_to_date(self, temp_data_dir):
         """Test run_migrations when already up to date."""
-        from src.migrations.runner import run_migrations, SCHEMA_VERSION
+        from src.storage.migrations.runner import run_migrations, SCHEMA_VERSION
 
-        with patch("src.migrations.runner.get_current_schema_version") as mock_version:
+        with patch("src.storage.migrations.runner.get_current_schema_version") as mock_version:
             mock_version.return_value = SCHEMA_VERSION
 
             result = run_migrations()
@@ -94,12 +94,12 @@ class TestMigrationRunner:
 
     def test_run_migrations_dry_run(self, temp_data_dir):
         """Test dry run mode doesn't modify anything."""
-        from src.migrations.runner import run_migrations
+        from src.storage.migrations.runner import run_migrations
 
         db_path = str(Path(temp_data_dir) / "db")
 
-        with patch("src.migrations.runner.DB_PATH", db_path), \
-             patch("src.migrations.runner.get_current_schema_version") as mock_version:
+        with patch("src.storage.migrations.runner.DB_PATH", db_path), \
+             patch("src.storage.migrations.runner.get_current_schema_version") as mock_version:
             mock_version.return_value = 0
 
             result = run_migrations(dry_run=True)
@@ -115,11 +115,11 @@ class TestMigrationRunner:
 
     def test_run_migrations_from_zero(self, temp_data_dir):
         """Test running migrations from version 0."""
-        from src.migrations.runner import run_migrations, SCHEMA_VERSION
+        from src.storage.migrations.runner import run_migrations, SCHEMA_VERSION
 
         db_path = str(Path(temp_data_dir) / "db")
 
-        with patch("src.migrations.runner.DB_PATH", db_path):
+        with patch("src.storage.migrations.runner.DB_PATH", db_path):
             result = run_migrations(from_version=0)
 
             assert result["status"] == "complete"
@@ -132,10 +132,10 @@ class TestBackup:
 
     def test_backup_creates_copy(self, temp_data_dir):
         """Test backup creates a copy of the database."""
-        from src.migrations.backup import backup_database
+        from src.storage.migrations.backup import backup_database
 
-        with patch("src.migrations.backup.DB_PATH", str(Path(temp_data_dir) / "db")), \
-             patch("src.migrations.backup.get_data_path") as mock_data_path:
+        with patch("src.storage.migrations.backup.DB_PATH", str(Path(temp_data_dir) / "db")), \
+             patch("src.storage.migrations.backup.get_data_path") as mock_data_path:
             mock_data_path.return_value = Path(temp_data_dir)
 
             backup_path = backup_database(label="test")
@@ -148,10 +148,10 @@ class TestBackup:
 
     def test_backup_without_label(self, temp_data_dir):
         """Test backup without a label uses timestamp only."""
-        from src.migrations.backup import backup_database
+        from src.storage.migrations.backup import backup_database
 
-        with patch("src.migrations.backup.DB_PATH", str(Path(temp_data_dir) / "db")), \
-             patch("src.migrations.backup.get_data_path") as mock_data_path:
+        with patch("src.storage.migrations.backup.DB_PATH", str(Path(temp_data_dir) / "db")), \
+             patch("src.storage.migrations.backup.get_data_path") as mock_data_path:
             mock_data_path.return_value = Path(temp_data_dir)
 
             backup_path = backup_database()
@@ -161,7 +161,7 @@ class TestBackup:
 
     def test_list_backups(self, temp_data_dir):
         """Test listing backups."""
-        from src.migrations.backup import list_backups
+        from src.storage.migrations.backup import list_backups
 
         # Create fake backup directories
         backups_dir = Path(temp_data_dir) / "backups"
@@ -170,7 +170,7 @@ class TestBackup:
         (backups_dir / "backup_test_20240102_120000").mkdir()
         (backups_dir / "not_a_backup").mkdir()  # Should be ignored
 
-        with patch("src.migrations.backup.get_backup_dir") as mock_dir:
+        with patch("src.storage.migrations.backup.get_backup_dir") as mock_dir:
             mock_dir.return_value = backups_dir
 
             backups = list_backups()
@@ -181,10 +181,10 @@ class TestBackup:
 
     def test_backup_cleanup_keeps_recent(self, temp_data_dir):
         """Test that backup cleanup keeps the N most recent backups."""
-        from src.migrations.backup import backup_database
+        from src.storage.migrations.backup import backup_database
 
-        with patch("src.migrations.backup.DB_PATH", str(Path(temp_data_dir) / "db")), \
-             patch("src.migrations.backup.get_data_path") as mock_data_path:
+        with patch("src.storage.migrations.backup.DB_PATH", str(Path(temp_data_dir) / "db")), \
+             patch("src.storage.migrations.backup.get_data_path") as mock_data_path:
             mock_data_path.return_value = Path(temp_data_dir)
 
             # Create more than 5 backups
@@ -198,11 +198,11 @@ class TestBackup:
 
     def test_backup_fails_if_no_db(self, temp_data_dir):
         """Test backup raises error if database doesn't exist."""
-        from src.migrations.backup import backup_database
+        from src.storage.migrations.backup import backup_database
 
         # Point to non-existent db
-        with patch("src.migrations.backup.DB_PATH", "/nonexistent/db"), \
-             patch("src.migrations.backup.get_data_path") as mock_data_path:
+        with patch("src.storage.migrations.backup.DB_PATH", "/nonexistent/db"), \
+             patch("src.storage.migrations.backup.get_data_path") as mock_data_path:
             mock_data_path.return_value = Path(temp_data_dir)
 
             with pytest.raises(FileNotFoundError):
@@ -214,7 +214,7 @@ class TestVersionCheck:
 
     def test_get_current_version(self):
         """Test getting current version info."""
-        from src.version import get_current_version
+        from src.tools.orient.version import get_current_version
 
         with patch.dict(os.environ, {
             "CORTEX_GIT_COMMIT": "abc1234567890",
@@ -228,7 +228,7 @@ class TestVersionCheck:
 
     def test_check_for_updates_no_local_head(self):
         """Test update check without local HEAD."""
-        from src.version import check_for_updates, clear_version_cache
+        from src.tools.orient.version import check_for_updates, clear_version_cache
 
         clear_version_cache()
         result = check_for_updates(local_head=None)
@@ -239,7 +239,7 @@ class TestVersionCheck:
 
     def test_check_for_updates_same_commit(self):
         """Test update check when commits match."""
-        from src.version import check_for_updates, clear_version_cache
+        from src.tools.orient.version import check_for_updates, clear_version_cache
 
         with patch.dict(os.environ, {"CORTEX_GIT_COMMIT": "abc1234"}):
             clear_version_cache()
@@ -249,7 +249,7 @@ class TestVersionCheck:
 
     def test_check_for_updates_different_commit(self):
         """Test update check when commits differ."""
-        from src.version import check_for_updates, clear_version_cache
+        from src.tools.orient.version import check_for_updates, clear_version_cache
 
         with patch.dict(os.environ, {"CORTEX_GIT_COMMIT": "abc1234"}):
             clear_version_cache()
@@ -261,7 +261,7 @@ class TestVersionCheck:
 
     def test_version_cache(self):
         """Test that version check results are cached."""
-        from src.version import check_for_updates, clear_version_cache, _version_cache
+        from src.tools.orient.version import check_for_updates, clear_version_cache, _version_cache
 
         clear_version_cache()
 

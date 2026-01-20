@@ -6,15 +6,15 @@ from pathlib import Path
 
 import pytest
 
-from src.git import get_current_branch, get_git_info
-from src.search import (
+from src.external.git import get_current_branch, get_git_info
+from src.tools.search import (
     BM25Index,
     HybridSearcher,
     RerankerService,
     apply_recency_boost,
     reciprocal_rank_fusion,
 )
-from src.security import scrub_secrets
+from src.utils.secret_scrubber import scrub_secrets
 from src.storage import get_collection_stats, get_or_create_collection
 
 

@@ -96,7 +96,7 @@ Key decisions: Used factory pattern for flexibility.
 
     def test_search_latency_under_500ms(self, populated_collection):
         """Search should complete in under 500ms for typical queries."""
-        from src.search import HybridSearcher
+        from src.tools.search import HybridSearcher
 
         searcher = HybridSearcher(populated_collection)
         searcher.build_index()
@@ -118,7 +118,7 @@ Key decisions: Used factory pattern for flexibility.
 
     def test_search_with_rerank_under_1s(self, populated_collection):
         """Search + rerank should complete in under 1 second."""
-        from src.search import HybridSearcher, RerankerService
+        from src.tools.search import HybridSearcher, RerankerService
 
         searcher = HybridSearcher(populated_collection)
         searcher.build_index()
@@ -136,7 +136,7 @@ Key decisions: Used factory pattern for flexibility.
 
     def test_empty_collection_search_fast(self, temp_chroma_client):
         """Search on empty collection should be very fast."""
-        from src.search import HybridSearcher
+        from src.tools.search import HybridSearcher
         from src.storage import get_or_create_collection
 
         collection = get_or_create_collection(temp_chroma_client, "empty_bench")
@@ -249,7 +249,7 @@ def utility_function_{module_idx}_{file_idx}(data: Optional[str] = None) -> str:
 
     def test_ingest_small_codebase_throughput(self, codebase_small, temp_chroma_client):
         """Small codebase (20 files) should ingest at >10 files/sec."""
-        from src.ingest import ingest_codebase
+        from src.tools.ingest import ingest_codebase
         from src.storage import get_or_create_collection
 
         collection = get_or_create_collection(temp_chroma_client, "throughput_small")
@@ -270,7 +270,7 @@ def utility_function_{module_idx}_{file_idx}(data: Optional[str] = None) -> str:
 
     def test_ingest_medium_codebase_completes(self, codebase_medium, temp_chroma_client):
         """Medium codebase (100 files) should complete in <30 seconds."""
-        from src.ingest import ingest_codebase
+        from src.tools.ingest import ingest_codebase
         from src.storage import get_or_create_collection
 
         collection = get_or_create_collection(temp_chroma_client, "throughput_medium")
@@ -358,7 +358,7 @@ def validate_{i}(value: Optional[str]) -> bool:
 
     def test_large_codebase_ingest_completes(self, codebase_large, temp_chroma_client):
         """Large codebase (500 files) should complete ingest without timeout."""
-        from src.ingest import ingest_codebase
+        from src.tools.ingest import ingest_codebase
         from src.storage import get_or_create_collection
 
         collection = get_or_create_collection(temp_chroma_client, "large_codebase")
@@ -378,8 +378,8 @@ def validate_{i}(value: Optional[str]) -> bool:
 
     def test_large_codebase_search_still_fast(self, codebase_large, temp_chroma_client):
         """Search should remain fast even with large indexed codebase."""
-        from src.ingest import ingest_codebase
-        from src.search import HybridSearcher
+        from src.tools.ingest import ingest_codebase
+        from src.tools.search import HybridSearcher
         from src.storage import get_or_create_collection
 
         collection = get_or_create_collection(temp_chroma_client, "large_search")
@@ -419,7 +419,7 @@ class TestMemoryEfficiency:
         """Incremental ingests shouldn't accumulate memory."""
         import gc
 
-        from src.ingest import ingest_codebase
+        from src.tools.ingest import ingest_codebase
         from src.storage import get_or_create_collection
 
         collection = get_or_create_collection(temp_chroma_client, "memory_test")

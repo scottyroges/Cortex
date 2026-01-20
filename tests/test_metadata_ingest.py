@@ -10,7 +10,7 @@ from unittest.mock import Mock, patch, MagicMock
 import tempfile
 import os
 
-from src.ingest.metadata import (
+from src.tools.ingest.metadata import (
     ingest_file_metadata,
     build_dependencies,
     MetadataIngestionResult,
@@ -237,7 +237,7 @@ class TestDependencyBuilding:
 
     def test_build_dependencies(self, mock_collection):
         """Test building dependency documents."""
-        from src.ast.models import FileMetadata, ImportInfo
+        from src.tools.ingest.ast.models import FileMetadata, ImportInfo
 
         # Create mock results with imports
         result1 = MetadataIngestionResult(

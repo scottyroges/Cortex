@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 
 from src.storage import get_or_create_collection
-from src.tools.services import reset_services, set_collection
+from src.configs.services import reset_services, set_collection
 
 
 class TestFullSessionWorkflow:
@@ -159,7 +159,7 @@ def test_auth_token():
         """Test: orient -> ingest -> search workflow."""
         from src.tools.ingest import ingest_code_into_cortex
         from src.tools.orient import orient_session
-        from src.tools.search import search_cortex
+        from src.tools.search.search import search_cortex
 
         reset_services()
         collection = get_or_create_collection(temp_chroma_client, "e2e_session")
@@ -205,7 +205,7 @@ def test_auth_token():
         from src.tools.ingest import ingest_code_into_cortex
         from src.tools.notes import session_summary_to_cortex, save_note_to_cortex
         from src.tools.orient import orient_session
-        from src.tools.search import search_cortex
+        from src.tools.search.search import search_cortex
 
         reset_services()
         collection = get_or_create_collection(temp_chroma_client, "e2e_full_session")
@@ -267,15 +267,15 @@ class TestInitiativeLifecycle:
 
     def test_initiative_full_lifecycle(self, temp_chroma_client):
         """Test: create -> focus -> work (notes) -> complete -> search history."""
-        from src.tools.initiatives import (
+        from src.tools.initiatives.initiatives import (
             complete_initiative,
             create_initiative,
             focus_initiative,
             list_initiatives,
         )
         from src.tools.notes import session_summary_to_cortex, save_note_to_cortex
-        from src.tools.initiatives import summarize_initiative
-        from src.tools.search import search_cortex
+        from src.tools.initiatives.initiatives import summarize_initiative
+        from src.tools.search.search import search_cortex
 
         reset_services()
         collection = get_or_create_collection(temp_chroma_client, "e2e_initiative")
@@ -360,7 +360,7 @@ class TestInitiativeLifecycle:
 
     def test_multiple_initiatives_focus_switching(self, temp_chroma_client):
         """Test working with multiple initiatives and switching focus."""
-        from src.tools.initiatives import (
+        from src.tools.initiatives.initiatives import (
             create_initiative,
             focus_initiative,
             list_initiatives,
@@ -424,7 +424,7 @@ class TestStalenessDetection:
         import subprocess
 
         from src.tools.notes import insight_to_cortex
-        from src.tools.search import search_cortex
+        from src.tools.search.search import search_cortex
 
         # Initialize git
         subprocess.run(["git", "init"], cwd=temp_dir, capture_output=True)
@@ -495,9 +495,9 @@ class TestRecallWorkflow:
 
     def test_recall_recent_work(self, temp_chroma_client):
         """Test recalling recent work across sessions."""
-        from src.tools.initiatives import create_initiative
+        from src.tools.initiatives.initiatives import create_initiative
         from src.tools.notes import session_summary_to_cortex, save_note_to_cortex
-        from src.tools.recall import recall_recent_work
+        from src.tools.orient.recall import recall_recent_work
 
         reset_services()
         collection = get_or_create_collection(temp_chroma_client, "e2e_recall")
@@ -555,7 +555,7 @@ class TestErrorRecovery:
 
     def test_search_before_ingest(self, temp_chroma_client):
         """Search on empty/non-indexed repo should return empty, not error."""
-        from src.tools.search import search_cortex
+        from src.tools.search.search import search_cortex
 
         reset_services()
         collection = get_or_create_collection(temp_chroma_client, "e2e_empty")
@@ -572,7 +572,7 @@ class TestErrorRecovery:
 
     def test_focus_nonexistent_initiative(self, temp_chroma_client):
         """Focusing non-existent initiative should return clear error."""
-        from src.tools.initiatives import focus_initiative
+        from src.tools.initiatives.initiatives import focus_initiative
 
         reset_services()
         collection = get_or_create_collection(temp_chroma_client, "e2e_focus_error")
@@ -587,7 +587,7 @@ class TestErrorRecovery:
 
     def test_complete_already_completed(self, temp_chroma_client):
         """Completing already-completed initiative should handle gracefully."""
-        from src.tools.initiatives import complete_initiative, create_initiative
+        from src.tools.initiatives.initiatives import complete_initiative, create_initiative
 
         reset_services()
         collection = get_or_create_collection(temp_chroma_client, "e2e_double_complete")

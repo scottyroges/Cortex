@@ -9,7 +9,7 @@ from unittest.mock import patch
 import pytest
 
 from src.storage import get_or_create_collection
-from src.tools.services import reset_services, set_collection
+from src.configs.services import reset_services, set_collection
 
 
 class TestCreateInitiative:
@@ -17,7 +17,7 @@ class TestCreateInitiative:
 
     def test_create_initiative_basic(self, temp_chroma_client):
         """Test creating a basic initiative."""
-        from src.tools.initiatives import create_initiative
+        from src.tools.initiatives.initiatives import create_initiative
 
         reset_services()
         collection = get_or_create_collection(temp_chroma_client, "test_create_init")
@@ -36,7 +36,7 @@ class TestCreateInitiative:
 
     def test_create_initiative_with_goal(self, temp_chroma_client):
         """Test creating an initiative with a goal."""
-        from src.tools.initiatives import create_initiative
+        from src.tools.initiatives.initiatives import create_initiative
 
         reset_services()
         collection = get_or_create_collection(temp_chroma_client, "test_create_goal")
@@ -53,7 +53,7 @@ class TestCreateInitiative:
 
     def test_create_initiative_without_auto_focus(self, temp_chroma_client):
         """Test creating an initiative without auto-focus."""
-        from src.tools.initiatives import create_initiative
+        from src.tools.initiatives.initiatives import create_initiative
 
         reset_services()
         collection = get_or_create_collection(temp_chroma_client, "test_no_focus")
@@ -70,7 +70,7 @@ class TestCreateInitiative:
 
     def test_create_initiative_validation(self):
         """Test validation errors."""
-        from src.tools.initiatives import create_initiative
+        from src.tools.initiatives.initiatives import create_initiative
 
         result = json.loads(create_initiative(repository="", name="Test"))
         assert "error" in result
@@ -84,7 +84,7 @@ class TestListInitiatives:
 
     def test_list_initiatives_empty(self, temp_chroma_client):
         """Test listing when no initiatives exist."""
-        from src.tools.initiatives import list_initiatives
+        from src.tools.initiatives.initiatives import list_initiatives
 
         reset_services()
         collection = get_or_create_collection(temp_chroma_client, "test_list_empty")
@@ -98,7 +98,7 @@ class TestListInitiatives:
 
     def test_list_initiatives_with_filter(self, temp_chroma_client):
         """Test listing with status filter."""
-        from src.tools.initiatives import create_initiative, complete_initiative, list_initiatives
+        from src.tools.initiatives.initiatives import create_initiative, complete_initiative, list_initiatives
 
         reset_services()
         collection = get_or_create_collection(temp_chroma_client, "test_list_filter")
@@ -128,7 +128,7 @@ class TestFocusInitiative:
 
     def test_focus_initiative_by_name(self, temp_chroma_client):
         """Test focusing an initiative by name."""
-        from src.tools.initiatives import create_initiative, focus_initiative
+        from src.tools.initiatives.initiatives import create_initiative, focus_initiative
 
         reset_services()
         collection = get_or_create_collection(temp_chroma_client, "test_focus_name")
@@ -146,7 +146,7 @@ class TestFocusInitiative:
 
     def test_focus_initiative_by_id(self, temp_chroma_client):
         """Test focusing an initiative by ID."""
-        from src.tools.initiatives import create_initiative, focus_initiative
+        from src.tools.initiatives.initiatives import create_initiative, focus_initiative
 
         reset_services()
         collection = get_or_create_collection(temp_chroma_client, "test_focus_id")
@@ -162,7 +162,7 @@ class TestFocusInitiative:
 
     def test_focus_completed_initiative_fails(self, temp_chroma_client):
         """Test that focusing a completed initiative fails."""
-        from src.tools.initiatives import create_initiative, complete_initiative, focus_initiative
+        from src.tools.initiatives.initiatives import create_initiative, complete_initiative, focus_initiative
 
         reset_services()
         collection = get_or_create_collection(temp_chroma_client, "test_focus_completed")
@@ -180,7 +180,7 @@ class TestCompleteInitiative:
 
     def test_complete_initiative_basic(self, temp_chroma_client):
         """Test completing an initiative."""
-        from src.tools.initiatives import create_initiative, complete_initiative
+        from src.tools.initiatives.initiatives import create_initiative, complete_initiative
 
         reset_services()
         collection = get_or_create_collection(temp_chroma_client, "test_complete_basic")
@@ -200,7 +200,7 @@ class TestCompleteInitiative:
 
     def test_complete_initiative_clears_focus(self, temp_chroma_client):
         """Test that completing a focused initiative clears focus."""
-        from src.tools.initiatives import create_initiative, complete_initiative, list_initiatives
+        from src.tools.initiatives.initiatives import create_initiative, complete_initiative, list_initiatives
 
         reset_services()
         collection = get_or_create_collection(temp_chroma_client, "test_complete_focus")
@@ -214,7 +214,7 @@ class TestCompleteInitiative:
 
     def test_complete_initiative_validation(self):
         """Test validation errors."""
-        from src.tools.initiatives import complete_initiative
+        from src.tools.initiatives.initiatives import complete_initiative
 
         result = json.loads(complete_initiative(initiative="", summary="Done"))
         assert "error" in result
@@ -228,7 +228,7 @@ class TestCompletionSignals:
 
     def test_detect_completion_keywords(self):
         """Test detection of completion keywords."""
-        from src.tools.initiatives import detect_completion_signals
+        from src.tools.initiatives.initiatives import detect_completion_signals
 
         assert detect_completion_signals("This feature is complete") is True
         assert detect_completion_signals("Task done") is True
@@ -241,7 +241,7 @@ class TestCompletionSignals:
 
     def test_completion_signal_word_boundary(self):
         """Test that signals match word boundaries."""
-        from src.tools.initiatives import detect_completion_signals
+        from src.tools.initiatives.initiatives import detect_completion_signals
 
         assert detect_completion_signals("complete") is True
         assert detect_completion_signals("completed") is True
@@ -255,7 +255,7 @@ class TestStalenessDetection:
 
     def test_check_staleness_recent(self):
         """Test that recent initiatives are not stale."""
-        from src.tools.initiatives import check_initiative_staleness
+        from src.tools.initiatives.initiatives import check_initiative_staleness
 
         now = datetime.now(timezone.utc)
         recent = now - timedelta(days=2)
@@ -267,7 +267,7 @@ class TestStalenessDetection:
 
     def test_check_staleness_old(self):
         """Test that old initiatives are stale."""
-        from src.tools.initiatives import check_initiative_staleness
+        from src.tools.initiatives.initiatives import check_initiative_staleness
 
         now = datetime.now(timezone.utc)
         old = now - timedelta(days=10)
@@ -279,7 +279,7 @@ class TestStalenessDetection:
 
     def test_check_staleness_custom_threshold(self):
         """Test custom staleness threshold."""
-        from src.tools.initiatives import check_initiative_staleness
+        from src.tools.initiatives.initiatives import check_initiative_staleness
 
         now = datetime.now(timezone.utc)
         week_old = now - timedelta(days=7)
@@ -298,15 +298,15 @@ class TestInitiativeTagging:
 
     def test_session_summary_tagged_with_focused_initiative(self, temp_chroma_client):
         """Test that session summaries are tagged with focused initiative."""
-        from src.tools.initiatives import create_initiative
+        from src.tools.initiatives.initiatives import create_initiative
         from src.tools.notes import session_summary_to_cortex
 
         reset_services()
         collection = get_or_create_collection(temp_chroma_client, "test_session_tag")
         set_collection(collection)
 
-        with patch("src.git.get_current_branch", return_value="main"):
-            with patch("src.tools.services.get_repo_path", return_value=None):
+        with patch("src.external.git.get_current_branch", return_value="main"):
+            with patch("src.configs.services.get_repo_path", return_value=None):
 
                 # Create and focus initiative
                 create_result = json.loads(create_initiative(
@@ -328,15 +328,15 @@ class TestInitiativeTagging:
 
     def test_note_tagged_with_focused_initiative(self, temp_chroma_client):
         """Test that notes are tagged with focused initiative."""
-        from src.tools.initiatives import create_initiative
+        from src.tools.initiatives.initiatives import create_initiative
         from src.tools.notes import save_note_to_cortex
 
         reset_services()
         collection = get_or_create_collection(temp_chroma_client, "test_note_tag")
         set_collection(collection)
 
-        with patch("src.git.get_current_branch", return_value="main"):
-            with patch("src.tools.services.get_repo_path", return_value=None):
+        with patch("src.external.git.get_current_branch", return_value="main"):
+            with patch("src.configs.services.get_repo_path", return_value=None):
 
                 # Create and focus initiative
                 create_result = json.loads(create_initiative(
@@ -356,15 +356,15 @@ class TestInitiativeTagging:
 
     def test_session_summary_completion_signal_detected(self, temp_chroma_client):
         """Test that completion signals are detected in session summaries."""
-        from src.tools.initiatives import create_initiative
+        from src.tools.initiatives.initiatives import create_initiative
         from src.tools.notes import session_summary_to_cortex
 
         reset_services()
         collection = get_or_create_collection(temp_chroma_client, "test_session_signal")
         set_collection(collection)
 
-        with patch("src.git.get_current_branch", return_value="main"):
-            with patch("src.tools.services.get_repo_path", return_value=None):
+        with patch("src.external.git.get_current_branch", return_value="main"):
+            with patch("src.configs.services.get_repo_path", return_value=None):
 
                 create_initiative(repository="TestRepo", name="Feature")
 
@@ -383,7 +383,7 @@ class TestOrientWithInitiatives:
 
     def test_orient_returns_focused_initiative(self, temp_chroma_client, temp_git_repo):
         """Test that orient returns focused initiative info."""
-        from src.tools.initiatives import create_initiative
+        from src.tools.initiatives.initiatives import create_initiative
         from src.tools.orient import orient_session
 
         reset_services()
@@ -400,9 +400,9 @@ class TestOrientWithInitiatives:
 
     def test_orient_detects_stale_initiative(self, temp_chroma_client, temp_git_repo):
         """Test that orient detects stale initiatives."""
-        from src.tools.initiatives import create_initiative
+        from src.tools.initiatives.initiatives import create_initiative
         from src.tools.orient import orient_session
-        from src.tools.services import get_collection
+        from src.configs.services import get_collection
 
         reset_services()
         collection = get_or_create_collection(temp_chroma_client, "test_orient_stale")
@@ -439,7 +439,7 @@ class TestInitiativeBoost:
 
     def test_apply_initiative_boost_multiplies_score(self):
         """Test that boost multiplies score by factor."""
-        from src.tools.search import _apply_initiative_boost
+        from src.tools.search.search import _apply_initiative_boost
 
         results = [
             {"text": "doc1", "rerank_score": 0.8, "meta": {"initiative_id": "initiative:abc123"}},
@@ -459,7 +459,7 @@ class TestInitiativeBoost:
 
     def test_apply_initiative_boost_reorders_results(self):
         """Test that boost can reorder results."""
-        from src.tools.search import _apply_initiative_boost
+        from src.tools.search.search import _apply_initiative_boost
 
         # Lower scored result from focused initiative
         results = [
@@ -475,7 +475,7 @@ class TestInitiativeBoost:
 
     def test_apply_initiative_boost_uses_existing_boosted_score(self):
         """Test that boost applies to existing boosted_score if present."""
-        from src.tools.search import _apply_initiative_boost
+        from src.tools.search.search import _apply_initiative_boost
 
         results = [
             {"text": "doc1", "rerank_score": 0.8, "boosted_score": 0.85, "meta": {"initiative_id": "initiative:abc"}},
@@ -492,16 +492,16 @@ class TestSearchWithInitiatives:
 
     def test_search_filters_by_initiative(self, temp_chroma_client):
         """Test that search can filter by initiative."""
-        from src.tools.initiatives import create_initiative
+        from src.tools.initiatives.initiatives import create_initiative
         from src.tools.notes import save_note_to_cortex
-        from src.tools.search import search_cortex
+        from src.tools.search.search import search_cortex
 
         reset_services()
         collection = get_or_create_collection(temp_chroma_client, "test_search_init")
         set_collection(collection)
 
-        with patch("src.git.get_current_branch", return_value="main"):
-            with patch("src.tools.services.get_repo_path", return_value=None):
+        with patch("src.external.git.get_current_branch", return_value="main"):
+            with patch("src.configs.services.get_repo_path", return_value=None):
 
                 # Create two initiatives with notes
                 create_initiative(repository="TestRepo", name="Initiative A")

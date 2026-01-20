@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.tools.staleness import (
+from src.tools.search.staleness import (
     check_insight_staleness,
     check_note_staleness,
     format_verification_warning,
@@ -275,12 +275,12 @@ class TestValidateInsight:
         mock_searcher = MagicMock()
         mock_searcher.build_index = MagicMock()
 
-        with patch("src.tools.notes.get_collection", return_value=collection), \
-             patch("src.tools.notes.get_repo_path", return_value=None), \
-             patch("src.tools.notes.get_searcher", return_value=mock_searcher), \
-             patch("src.tools.notes.get_current_branch", return_value="main"), \
-             patch("src.tools.notes.get_head_commit", return_value="abc123"), \
-             patch("src.tools.initiatives.get_collection", return_value=collection):
+        with patch("src.tools.notes.notes.get_collection", return_value=collection), \
+             patch("src.tools.notes.notes.get_repo_path", return_value=None), \
+             patch("src.tools.notes.notes.get_searcher", return_value=mock_searcher), \
+             patch("src.tools.notes.notes.get_current_branch", return_value="main"), \
+             patch("src.tools.notes.notes.get_head_commit", return_value="abc123"), \
+             patch("src.tools.initiatives.initiatives.get_collection", return_value=collection):
             yield collection
 
     def test_validate_insight_still_valid(self, mock_services):

@@ -652,7 +652,7 @@ edit_config() {
         python3 -c "
 import sys
 sys.path.insert(0, '$CORTEX_SRC_DIR')
-from src.config import create_default_config
+from src.configs.config import create_default_config
 create_default_config()
 "
     fi

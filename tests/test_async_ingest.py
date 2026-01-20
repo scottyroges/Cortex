@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.ingest.async_processor import (
+from src.tools.ingest.async_processor import (
     IngestionTask,
     IngestionTaskStore,
     IngestionWorker,
@@ -269,15 +269,15 @@ class TestAsyncIngestIntegration:
         (src_dir / "test.py").write_text("# test")
 
         # Mock the delta strategy to return few files
-        with patch("src.tools.ingest.select_delta_strategy") as mock_strategy:
+        with patch("src.tools.ingest.ingest.select_delta_strategy") as mock_strategy:
             mock_result = MagicMock()
             mock_result.files_to_process = [tmp_path / "src/test.py"]  # 1 file
             mock_strategy.return_value.get_files_to_process.return_value = mock_result
 
-            with patch("src.tools.ingest._run_sync_ingestion") as mock_sync:
+            with patch("src.tools.ingest.ingest._run_sync_ingestion") as mock_sync:
                 mock_sync.return_value = json.dumps({"status": "success"})
 
-                from src.tools.ingest import ingest_code_into_cortex
+                from src.tools.ingest.ingest import ingest_code_into_cortex
 
                 # This should use sync mode (1 file < 50)
                 result = ingest_code_into_cortex(str(tmp_path))
@@ -289,16 +289,16 @@ class TestAsyncIngestIntegration:
         from src.tools.ingest import ASYNC_FILE_THRESHOLD
 
         # Mock the delta strategy to return many files
-        with patch("src.tools.ingest.select_delta_strategy") as mock_strategy:
+        with patch("src.tools.ingest.ingest.select_delta_strategy") as mock_strategy:
             mock_result = MagicMock()
             # Create list of 60 mock files (> 50 threshold)
             mock_result.files_to_process = [tmp_path / f"file{i}.py" for i in range(60)]
             mock_strategy.return_value.get_files_to_process.return_value = mock_result
 
-            with patch("src.tools.ingest._queue_async_ingestion") as mock_async:
+            with patch("src.tools.ingest.ingest._queue_async_ingestion") as mock_async:
                 mock_async.return_value = json.dumps({"status": "queued", "task_id": "test"})
 
-                from src.tools.ingest import ingest_code_into_cortex
+                from src.tools.ingest.ingest import ingest_code_into_cortex
 
                 # This should use async mode (60 files >= 50)
                 result = ingest_code_into_cortex(str(tmp_path))
@@ -307,10 +307,10 @@ class TestAsyncIngestIntegration:
 
     def test_force_full_always_async(self, tmp_path):
         """Test that force_full=True always uses async mode."""
-        with patch("src.tools.ingest._queue_async_ingestion") as mock_async:
+        with patch("src.tools.ingest.ingest._queue_async_ingestion") as mock_async:
             mock_async.return_value = json.dumps({"status": "queued", "task_id": "test"})
 
-            from src.tools.ingest import ingest_code_into_cortex
+            from src.tools.ingest.ingest import ingest_code_into_cortex
 
             result = ingest_code_into_cortex(str(tmp_path), force_full=True)
 

@@ -9,9 +9,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.config import DEFAULT_IGNORE_PATTERNS
-from src.git import get_git_changed_files, get_head_commit, get_untracked_files, is_git_repo
-from src.ingest import (
+from src.configs.config import DEFAULT_IGNORE_PATTERNS
+from src.external.git import get_git_changed_files, get_head_commit, get_untracked_files, is_git_repo
+from src.tools.ingest import (
     compute_file_hash,
     generate_tree_structure,
     get_changed_files,
@@ -19,7 +19,7 @@ from src.ingest import (
     store_skeleton,
     walk_codebase,
 )
-from src.ingest.skeleton import _analyze_tree, _generate_tree_fallback
+from src.tools.ingest.skeleton import _analyze_tree, _generate_tree_fallback
 from src.storage import delete_file_chunks, get_or_create_collection
 
 
@@ -269,7 +269,7 @@ class TestSkeleton:
 
         (temp_dir / "README.md").write_text("# Project")
 
-        from src.config import DEFAULT_IGNORE_PATTERNS
+        from src.configs.config import DEFAULT_IGNORE_PATTERNS
 
         tree = _generate_tree_fallback(temp_dir, max_depth=10, ignore=DEFAULT_IGNORE_PATTERNS)
 
@@ -291,7 +291,7 @@ class TestSkeleton:
         nm_dir.mkdir()
         (nm_dir / "package.js").write_text("module.exports = {}")
 
-        from src.config import DEFAULT_IGNORE_PATTERNS
+        from src.configs.config import DEFAULT_IGNORE_PATTERNS
 
         tree = _generate_tree_fallback(temp_dir, max_depth=10, ignore=DEFAULT_IGNORE_PATTERNS)
 
@@ -308,7 +308,7 @@ class TestSkeleton:
             current.mkdir()
             (current / f"file{i}.py").write_text(f"# level {i}")
 
-        from src.config import DEFAULT_IGNORE_PATTERNS
+        from src.configs.config import DEFAULT_IGNORE_PATTERNS
 
         tree = _generate_tree_fallback(temp_dir, max_depth=2, ignore=DEFAULT_IGNORE_PATTERNS)
 
