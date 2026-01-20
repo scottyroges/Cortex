@@ -19,7 +19,7 @@ from .claude_code import (
 
 from src.configs import get_logger
 
-logger = get_logger("install.hooks")
+logger = get_logger("integrations.hooks")
 
 
 @dataclass

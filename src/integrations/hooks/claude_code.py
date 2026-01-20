@@ -13,7 +13,7 @@ from typing import Optional
 from src.configs import get_logger
 from src.configs.constants import get_timeout
 
-logger = get_logger("install.claude_code")
+logger = get_logger("integrations.hooks.claude_code")
 
 # Hook configuration for Claude Code (new matcher-based format)
 # See: https://code.claude.com/docs/en/hooks

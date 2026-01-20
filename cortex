@@ -834,7 +834,7 @@ import sys
 sys.path.insert(0, '$CORTEX_SRC_DIR')
 from pathlib import Path
 try:
-    from src.install import install_hooks
+    from src.integrations.hooks import install_hooks
     success, messages = install_hooks(
         claude_code=True,
         source_dir=Path('$CORTEX_SRC_DIR'),
@@ -875,7 +875,7 @@ hooks_status() {
 import sys
 sys.path.insert(0, '$CORTEX_SRC_DIR')
 try:
-    from src.install import get_hook_status
+    from src.integrations.hooks import get_hook_status
 
     status = get_hook_status()
     details = status.details.get('claude_code', {})
@@ -949,7 +949,7 @@ import sys
 sys.path.insert(0, '$CORTEX_SRC_DIR')
 from pathlib import Path
 try:
-    from src.install import repair_hooks, copy_hook_scripts
+    from src.integrations.hooks import repair_hooks, copy_hook_scripts
 
     # First, refresh hook scripts from source
     success, msg = copy_hook_scripts(Path('$CORTEX_SRC_DIR'))
@@ -987,7 +987,7 @@ hooks_uninstall() {
 import sys
 sys.path.insert(0, '$CORTEX_SRC_DIR')
 try:
-    from src.install.hooks import uninstall_hooks
+    from src.integrations.hooks import uninstall_hooks
     success, messages = uninstall_hooks(claude_code=True)
     for msg in messages:
         print(f'  {msg}')
@@ -1198,7 +1198,7 @@ else:
 import sys
 sys.path.insert(0, '$CORTEX_SRC_DIR')
 try:
-    from src.install import get_hook_status
+    from src.integrations.hooks import get_hook_status
     status = get_hook_status()
     if status.claude_code_installed:
         print('OK (Claude Code hook installed)')

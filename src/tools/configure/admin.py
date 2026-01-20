@@ -256,7 +256,7 @@ def _get_full_status() -> str:
     try:
         from src.configs.yaml_config import load_yaml_config, get_config_path
         from src.configs.paths import get_data_path
-        from src.install import get_hook_status
+        from src.integrations.hooks import get_hook_status
         from src.external.llm import get_available_providers
 
         config = load_yaml_config()
