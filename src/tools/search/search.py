@@ -389,6 +389,7 @@ class SearchPipeline:
             "branch": meta.get("branch", "unknown"),
             "language": meta.get("language", "unknown"),
             "score": float(round(final_score, 4)),
+            "created_at": meta.get("created_at"),
         }
 
         requires_verification = False

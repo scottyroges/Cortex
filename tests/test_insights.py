@@ -296,3 +296,33 @@ class TestInsightToCortex:
         )
 
         assert results["metadatas"][0]["repository"] == "global"
+
+    def test_insight_without_repository_uses_focused_initiative_repo(self, mock_services):
+        """Test insight without repository uses focused initiative's repository."""
+        collection = mock_services
+
+        # Create a focus document for a repository
+        collection.upsert(
+            ids=["FocusedRepo:focus"],
+            documents=["Current focus: Test Initiative"],
+            metadatas=[{
+                "type": "focus",
+                "repository": "FocusedRepo",
+                "initiative_id": "initiative:test123",
+                "initiative_name": "Test Initiative",
+            }],
+        )
+
+        insight_to_cortex(
+            insight="Insight should use focused repo",
+            files=["some/file.py"],
+            # No repository specified
+        )
+
+        results = collection.get(
+            where={"type": "insight"},
+            include=["metadatas"],
+        )
+
+        # Should use repository from focused initiative, not "global"
+        assert results["metadatas"][0]["repository"] == "FocusedRepo"

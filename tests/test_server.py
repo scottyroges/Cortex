@@ -78,6 +78,40 @@ class TestSearchCortex:
         results = searcher.search("anything", top_k=10)
         assert results == []
 
+    def test_search_results_include_created_at(self, temp_chroma_client):
+        """Test that search results include created_at timestamp."""
+        import json
+        from src.configs.services import reset_services, set_collection
+        from src.storage import get_or_create_collection
+        from src.tools.search.search import search_cortex
+
+        # Reset services and inject our test collection
+        reset_services()
+        collection = get_or_create_collection(temp_chroma_client, "cortex_memory")
+        set_collection(collection)
+
+        timestamp = "2026-01-15T10:30:00+00:00"
+
+        # Add a note with created_at
+        collection.add(
+            documents=["Important architectural decision about caching"],
+            ids=["note:test123"],
+            metadatas=[{
+                "type": "note",
+                "file_path": "unknown",
+                "repository": "TestRepo",
+                "branch": "unknown",
+                "language": "unknown",
+                "created_at": timestamp,
+            }],
+        )
+
+        result = search_cortex(query="architectural decision caching", repository="TestRepo")
+        parsed = json.loads(result)
+
+        assert len(parsed["results"]) > 0
+        assert parsed["results"][0]["created_at"] == timestamp
+
 
 class TestIngestCodeIntoCortex:
     """Tests for ingest_code_into_cortex tool."""

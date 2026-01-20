@@ -40,6 +40,50 @@ def _get_focused_initiative_info(repository: str) -> tuple[Optional[str], Option
     return None, None
 
 
+def _resolve_repository(repository: Optional[str]) -> str:
+    """
+    Resolve repository name, auto-detecting if not provided.
+
+    Resolution order:
+    1. Explicit repository parameter
+    2. Current working directory (if git repo)
+    3. Repository from any focused initiative
+    4. "global" fallback
+
+    Args:
+        repository: Explicit repository name, or None to auto-detect
+
+    Returns:
+        Repository name (falls back to "global" if detection fails)
+    """
+    if repository:
+        return repository
+
+    # Auto-detect from current working directory
+    repo_path = get_repo_path()
+    if repo_path:
+        return repo_path.rstrip("/").split("/")[-1]
+
+    # Try to get repository from any focused initiative
+    try:
+        collection = get_collection()
+        # Find any focus document to get its repository
+        focus_results = collection.get(
+            where={"type": "focus"},
+            include=["metadatas"],
+            limit=1,
+        )
+        if focus_results["ids"] and focus_results["metadatas"]:
+            focused_repo = focus_results["metadatas"][0].get("repository")
+            if focused_repo:
+                logger.debug(f"Auto-detected repository from focused initiative: {focused_repo}")
+                return focused_repo
+    except Exception as e:
+        logger.debug(f"Failed to get repository from focused initiative: {e}")
+
+    return "global"
+
+
 def save_memory(
     content: str,
     kind: Literal["note", "insight"],
@@ -106,7 +150,7 @@ def _save_note(
     Returns:
         JSON with note ID and save status
     """
-    repo = repository or "global"
+    repo = _resolve_repository(repository)
 
     logger.info(f"Saving note: title='{title}', repository={repo}")
 
@@ -211,7 +255,7 @@ def conclude_session(
     Returns:
         JSON with session summary status
     """
-    repo = repository or "global"
+    repo = _resolve_repository(repository)
 
     logger.info(f"Saving session summary to Cortex: {len(changed_files)} files, repository={repo}")
 
@@ -337,7 +381,7 @@ def _save_insight(
             "error": "files parameter is required and must be a non-empty list",
         })
 
-    repo = repository or "global"
+    repo = _resolve_repository(repository)
 
     logger.info(f"Saving insight: title='{title}', files={len(files)}, repository={repo}")
 
@@ -468,7 +512,7 @@ def validate_insight(
     Returns:
         JSON with validation status and any actions taken
     """
-    repo = repository or "global"
+    repo = _resolve_repository(repository)
 
     logger.info(f"Validating insight: {insight_id}, result={validation_result}")
 
