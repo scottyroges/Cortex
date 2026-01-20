@@ -122,54 +122,31 @@ class QueueProcessor:
         Process a single queued session.
 
         Generates summary using LLM and saves to Cortex.
-        Returns True if successful.
+        Returns True if successful (or empty transcript).
+        Returns False if processing failed (keeps in queue for retry).
         """
-        from src.configs.yaml_config import load_yaml_config
-        from src.external.llm import get_provider
-        from src.tools.memory import conclude_session
+        from .session_processor import process_session
 
         session_id = session.get("session_id", "unknown")
         transcript_text = session.get("transcript_text", "")
         files_edited = session.get("files_edited", [])
         repository = session.get("repository", "global")
-        # Initiative ID captured at session end time (ensures correct linking)
         initiative_id = session.get("initiative_id")
 
-        if not transcript_text:
+        result = process_session(
+            session_id=session_id,
+            transcript_text=transcript_text,
+            files_edited=files_edited,
+            repository=repository,
+            initiative_id=initiative_id,
+        )
+
+        # Empty transcripts are considered "processed" (remove from queue)
+        if result.error == "empty_transcript":
             logger.warning(f"Empty transcript for session {session_id}")
-            return True  # Consider it "processed" to remove from queue
-
-        # Load config and get LLM provider
-        try:
-            config = load_yaml_config()
-            provider = get_provider(config)
-        except Exception as e:
-            logger.error(f"No LLM provider available: {e}")
-            return False  # Keep in queue for retry
-
-        # Generate summary
-        try:
-            logger.debug(f"Generating summary for session {session_id}")
-            summary = provider.summarize_session(transcript_text)
-            logger.debug(f"Generated summary ({len(summary)} chars)")
-        except Exception as e:
-            logger.error(f"Failed to generate summary: {e}")
-            return False  # Keep in queue for retry
-
-        # Save to Cortex with initiative context
-        try:
-            result = conclude_session(
-                summary=summary,
-                changed_files=files_edited,
-                repository=repository,
-                initiative=initiative_id,  # Pass initiative from queue
-            )
-            initiative_info = f" (initiative: {initiative_id})" if initiative_id else ""
-            logger.info(f"Saved session summary {session_id} to Cortex: {repository}{initiative_info}")
             return True
-        except Exception as e:
-            logger.error(f"Failed to save session summary to Cortex: {e}")
-            return False
+
+        return result.success
 
 
 # Global processor instance

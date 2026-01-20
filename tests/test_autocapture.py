@@ -14,18 +14,17 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.tools.autocapture.transcript import (
-    ContentBlockParser,
-    ContentBlockResult,
-    LegacyFormatHandler,
+    _ContentBlockParser,
+    _ContentBlockResult,
+    _LegacyFormatHandler,
+    _TranscriptMetadataExtractor,
     Message,
     ParsedTranscript,
     ToolCall,
-    TranscriptMetadataExtractor,
-    extract_changed_files,
     parse_transcript_file,
     parse_transcript_jsonl,
 )
-from src.tools.autocapture.significance import (
+from src.tools.autocapture import (
     DEFAULT_CONFIG,
     SignificanceConfig,
     SignificanceResult,
@@ -221,23 +220,23 @@ class TestParsedTranscript:
 
 
 class TestContentBlockParser:
-    """Tests for ContentBlockParser."""
+    """Tests for _ContentBlockParser (internal helper)."""
 
     def test_parse_text_block(self):
         """Parses text blocks correctly."""
-        parser = ContentBlockParser()
+        parser = _ContentBlockParser()
         text = parser.parse_text_block({"type": "text", "text": "Hello"})
         assert text == "Hello"
 
     def test_parse_text_block_empty(self):
         """Empty text blocks return None."""
-        parser = ContentBlockParser()
+        parser = _ContentBlockParser()
         text = parser.parse_text_block({"type": "text", "text": ""})
         assert text is None
 
     def test_parse_tool_use_block(self):
         """Parses tool_use blocks into ToolCall."""
-        parser = ContentBlockParser()
+        parser = _ContentBlockParser()
         tc = parser.parse_tool_use_block({
             "type": "tool_use",
             "name": "Write",
@@ -248,7 +247,7 @@ class TestContentBlockParser:
 
     def test_parse_tool_result_block_string(self):
         """Parses string tool_result content."""
-        parser = ContentBlockParser()
+        parser = _ContentBlockParser()
         content = parser.parse_tool_result_block({
             "type": "tool_result",
             "content": "Success",
@@ -257,7 +256,7 @@ class TestContentBlockParser:
 
     def test_parse_tool_result_block_array(self):
         """Parses array tool_result content."""
-        parser = ContentBlockParser()
+        parser = _ContentBlockParser()
         content = parser.parse_tool_result_block({
             "type": "tool_result",
             "content": [
@@ -269,7 +268,7 @@ class TestContentBlockParser:
 
     def test_parse_content_array(self):
         """Parses mixed content arrays."""
-        parser = ContentBlockParser()
+        parser = _ContentBlockParser()
         result = parser.parse_content_array([
             {"type": "text", "text": "Hello"},
             {"type": "tool_use", "name": "Bash", "input": {"command": "ls"}},
@@ -287,18 +286,18 @@ class TestContentBlockParser:
 
 
 class TestTranscriptMetadataExtractor:
-    """Tests for TranscriptMetadataExtractor."""
+    """Tests for _TranscriptMetadataExtractor (internal helper)."""
 
     def test_extract_timestamp_milliseconds(self):
         """Extracts timestamp from milliseconds."""
-        extractor = TranscriptMetadataExtractor()
+        extractor = _TranscriptMetadataExtractor()
         ts = extractor.extract_timestamp({"timestamp": 1704067200000})  # 2024-01-01 00:00:00 UTC
         assert ts is not None
         assert ts.year == 2024
 
     def test_extract_timestamp_updates_bounds(self):
         """Timestamp extraction updates start/end times."""
-        extractor = TranscriptMetadataExtractor()
+        extractor = _TranscriptMetadataExtractor()
         extractor.extract_timestamp({"timestamp": 1704067200000})  # Earlier
         extractor.extract_timestamp({"timestamp": 1704070800000})  # Later
         assert extractor.start_time is not None
@@ -307,14 +306,14 @@ class TestTranscriptMetadataExtractor:
 
     def test_extract_project_path_cwd(self):
         """Extracts project path from cwd field."""
-        extractor = TranscriptMetadataExtractor()
+        extractor = _TranscriptMetadataExtractor()
         path = extractor.extract_project_path({"cwd": "/my/project"})
         assert path == "/my/project"
         assert extractor.project_path == "/my/project"
 
     def test_extract_project_path_first_wins(self):
         """First project path wins."""
-        extractor = TranscriptMetadataExtractor()
+        extractor = _TranscriptMetadataExtractor()
         extractor.extract_project_path({"cwd": "/first"})
         extractor.extract_project_path({"cwd": "/second"})
         assert extractor.project_path == "/first"
@@ -326,11 +325,11 @@ class TestTranscriptMetadataExtractor:
 
 
 class TestLegacyFormatHandler:
-    """Tests for LegacyFormatHandler."""
+    """Tests for _LegacyFormatHandler (internal helper)."""
 
     def test_parse_legacy_tool_use(self):
         """Parses legacy toolUse array format."""
-        handler = LegacyFormatHandler()
+        handler = _LegacyFormatHandler()
         tools = handler.parse_legacy_tool_use(
             {
                 "toolUse": [
@@ -452,15 +451,15 @@ class TestParseTranscriptFile:
 
 
 # =============================================================================
-# extract_changed_files Tests
+# files_edited Property Tests
 # =============================================================================
 
 
-class TestExtractChangedFiles:
-    """Tests for extract_changed_files function."""
+class TestFilesEdited:
+    """Tests for ParsedTranscript.files_edited property."""
 
-    def test_extract_changed_files(self):
-        """Extracts edited files from transcript."""
+    def test_files_edited_property(self):
+        """files_edited returns edited files from transcript."""
         transcript = ParsedTranscript(
             session_id="test",
             project_path="/project",
@@ -472,8 +471,8 @@ class TestExtractChangedFiles:
             start_time=None,
             end_time=None,
         )
-        files = extract_changed_files(transcript)
-        assert files == ["/a.py", "/b.py"]
+        # Use the property directly instead of removed extract_changed_files
+        assert transcript.files_edited == ["/a.py", "/b.py"]
 
 
 # =============================================================================
@@ -1222,10 +1221,10 @@ class TestProcessSyncEndpoint:
         assert result["status"] == "error"
         assert "No LLM provider" in result["error"]
 
-    @patch("src.controllers.http.api.autocapture.save_session_summary")
-    @patch("src.configs.yaml_config.load_yaml_config")
+    @patch("src.tools.memory.conclude_session")
     @patch("src.external.llm.get_provider")
-    def test_process_sync_success(self, mock_get_provider, mock_load_config, mock_save):
+    @patch("src.configs.yaml_config.load_yaml_config")
+    def test_process_sync_success(self, mock_load_config, mock_get_provider, mock_conclude):
         """process_sync succeeds with mocked dependencies."""
         from src.controllers.http.api import ProcessSyncRequest, process_sync
 
@@ -1233,7 +1232,7 @@ class TestProcessSyncEndpoint:
         mock_provider = MagicMock()
         mock_provider.summarize_session.return_value = "Test summary"
         mock_get_provider.return_value = mock_provider
-        mock_save.return_value = {"status": "success", "session_id": "test-session"}
+        mock_conclude.return_value = "{}"
 
         request = ProcessSyncRequest(
             session_id="test-1",
@@ -1248,7 +1247,7 @@ class TestProcessSyncEndpoint:
         assert result["session_id"] == "test-1"
         assert result["summary_length"] == len("Test summary")
         mock_provider.summarize_session.assert_called_once()
-        mock_save.assert_called_once()
+        mock_conclude.assert_called_once()
 
     @patch("src.configs.yaml_config.load_yaml_config")
     @patch("src.external.llm.get_provider")

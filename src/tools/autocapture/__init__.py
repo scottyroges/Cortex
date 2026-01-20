@@ -15,7 +15,9 @@ from .transcript import (
 from .significance import (
     SignificanceResult,
     SignificanceConfig,
+    DEFAULT_CONFIG,
     calculate_significance,
+    create_config_from_dict,
     is_significant,
 )
 from .queue_processor import (
@@ -24,6 +26,10 @@ from .queue_processor import (
     start_processor,
     stop_processor,
     trigger_processing,
+)
+from .session_processor import (
+    ProcessingResult,
+    process_session,
 )
 
 __all__ = [
@@ -36,8 +42,13 @@ __all__ = [
     # Significance detection
     "SignificanceResult",
     "SignificanceConfig",
+    "DEFAULT_CONFIG",
     "calculate_significance",
+    "create_config_from_dict",
     "is_significant",
+    # Session processing
+    "ProcessingResult",
+    "process_session",
     # Queue processing
     "QueueProcessor",
     "get_processor",

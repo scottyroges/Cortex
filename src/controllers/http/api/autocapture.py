@@ -223,50 +223,30 @@ def process_sync(request: ProcessSyncRequest) -> dict[str, Any]:
     Returns:
         Result with status, summary length, and commit info
     """
-    from src.configs.yaml_config import load_yaml_config
-    from src.external.llm import get_provider
+    from src.tools.autocapture.session_processor import process_session
 
     logger.info(f"Processing session synchronously: {request.session_id}")
 
+    # Handle empty transcripts
     if not request.transcript_text or not request.transcript_text.strip():
         return {"status": "skipped", "reason": "empty transcript"}
 
-    # Get LLM provider
-    try:
-        config = load_yaml_config()
-        provider = get_provider(config)
-        if provider is None:
-            return {"status": "error", "error": "No LLM provider available"}
-    except Exception as e:
-        logger.error(f"Failed to get LLM provider: {e}")
-        return {"status": "error", "error": f"No LLM provider: {e}"}
+    result = process_session(
+        session_id=request.session_id,
+        transcript_text=request.transcript_text,
+        files_edited=request.files_edited,
+        repository=request.repository,
+        initiative_id=request.initiative_id,
+    )
 
-    # Generate summary
-    try:
-        # Limit transcript to 100k chars
-        transcript_text = request.transcript_text[:100000]
-        summary = provider.summarize_session(transcript_text)
-        if not summary:
-            return {"status": "error", "error": "Summarization returned empty result"}
-    except Exception as e:
-        logger.error(f"Summarization failed: {e}")
-        return {"status": "error", "error": f"Summarization failed: {e}"}
-
-    # Save session summary with initiative context
-    try:
-        save_result = save_session_summary(SessionSummaryRequest(
-            summary=summary,
-            changed_files=request.files_edited,
-            repository=request.repository,
-            initiative_id=request.initiative_id,
-        ))
-        logger.info(f"Session summary saved synchronously: {request.session_id}")
+    if result.success:
         return {
             "status": "success",
-            "session_id": request.session_id,
-            "summary_length": len(summary),
-            "save_result": save_result,
+            "session_id": result.session_id,
+            "summary_length": len(result.summary) if result.summary else 0,
         }
-    except Exception as e:
-        logger.error(f"Save session summary failed: {e}")
-        return {"status": "error", "error": f"Save session summary failed: {e}"}
+    else:
+        return {
+            "status": "error",
+            "error": result.error,
+        }

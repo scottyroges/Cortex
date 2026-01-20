@@ -465,20 +465,20 @@ class TestSessionSummaryWithInitiative:
 class TestProcessSyncWithInitiative:
     """Tests for /process-sync endpoint with initiative linking."""
 
-    @patch("src.configs.yaml_config.load_yaml_config")
+    @patch("src.tools.memory.conclude_session")
     @patch("src.external.llm.get_provider")
-    @patch("src.controllers.http.api.autocapture.save_session_summary")
+    @patch("src.configs.yaml_config.load_yaml_config")
     def test_process_sync_passes_initiative_id(
-        self, mock_save, mock_get_provider, mock_load_config
+        self, mock_load_config, mock_get_provider, mock_conclude
     ):
-        """Test that initiative_id is passed through to save_session_summary."""
+        """Test that initiative_id is passed through to conclude_session."""
         from src.controllers.http.api import ProcessSyncRequest, process_sync
 
         mock_load_config.return_value = {}
         mock_provider = MagicMock()
         mock_provider.summarize_session.return_value = "Generated summary"
         mock_get_provider.return_value = mock_provider
-        mock_save.return_value = {"status": "success", "session_id": "test"}
+        mock_conclude.return_value = "{}"
 
         request = ProcessSyncRequest(
             session_id="test-session",
@@ -491,24 +491,24 @@ class TestProcessSyncWithInitiative:
         result = process_sync(request)
 
         assert result["status"] == "success"
-        mock_save.assert_called_once()
-        call_args = mock_save.call_args[0][0]  # First positional arg (SessionSummaryRequest)
-        assert call_args.initiative_id == "initiative:abc123"
+        mock_conclude.assert_called_once()
+        call_kwargs = mock_conclude.call_args[1]  # Keyword args
+        assert call_kwargs["initiative"] == "initiative:abc123"
 
-    @patch("src.configs.yaml_config.load_yaml_config")
+    @patch("src.tools.memory.conclude_session")
     @patch("src.external.llm.get_provider")
-    @patch("src.controllers.http.api.autocapture.save_session_summary")
+    @patch("src.configs.yaml_config.load_yaml_config")
     def test_process_sync_without_initiative(
-        self, mock_save, mock_get_provider, mock_load_config
+        self, mock_load_config, mock_get_provider, mock_conclude
     ):
-        """Test process_sync works without initiative_id (falls back to focused)."""
+        """Test process_sync works without initiative_id (passes None)."""
         from src.controllers.http.api import ProcessSyncRequest, process_sync
 
         mock_load_config.return_value = {}
         mock_provider = MagicMock()
         mock_provider.summarize_session.return_value = "Generated summary"
         mock_get_provider.return_value = mock_provider
-        mock_save.return_value = {"status": "success", "session_id": "test"}
+        mock_conclude.return_value = "{}"
 
         request = ProcessSyncRequest(
             session_id="test-session",
@@ -521,9 +521,9 @@ class TestProcessSyncWithInitiative:
         result = process_sync(request)
 
         assert result["status"] == "success"
-        mock_save.assert_called_once()
-        call_args = mock_save.call_args[0][0]
-        assert call_args.initiative_id is None
+        mock_conclude.assert_called_once()
+        call_kwargs = mock_conclude.call_args[1]
+        assert call_kwargs["initiative"] is None
 
 
 class TestBrowseUpdateEndpoint:

@@ -127,20 +127,20 @@ class ParsedTranscript:
 
 
 # =============================================================================
-# Content Block Parsing
+# Content Block Parsing (Internal)
 # =============================================================================
 
 
 @dataclass
-class ContentBlockResult:
-    """Result of parsing content blocks."""
+class _ContentBlockResult:
+    """Result of parsing content blocks. Internal use only."""
 
     text_parts: list[str] = field(default_factory=list)
     tool_calls: list[ToolCall] = field(default_factory=list)
 
 
-class ContentBlockParser:
-    """Parses different types of content blocks from Claude Code transcripts."""
+class _ContentBlockParser:
+    """Parses different types of content blocks from Claude Code transcripts. Internal use only."""
 
     def __init__(self, timestamp: Optional[datetime] = None):
         self.timestamp = timestamp
@@ -168,9 +168,9 @@ class ContentBlockParser:
             )
         return result_content if result_content else None
 
-    def parse_content_array(self, content: list) -> ContentBlockResult:
+    def parse_content_array(self, content: list) -> _ContentBlockResult:
         """Parse an array of content blocks."""
-        result = ContentBlockResult()
+        result = _ContentBlockResult()
 
         for block in content:
             block_type = block.get("type", "")
@@ -193,12 +193,12 @@ class ContentBlockParser:
 
 
 # =============================================================================
-# Metadata Extraction
+# Metadata Extraction (Internal)
 # =============================================================================
 
 
-class TranscriptMetadataExtractor:
-    """Extracts session metadata from transcript entries."""
+class _TranscriptMetadataExtractor:
+    """Extracts session metadata from transcript entries. Internal use only."""
 
     def __init__(self):
         self.project_path: Optional[str] = None
@@ -241,12 +241,12 @@ class TranscriptMetadataExtractor:
 
 
 # =============================================================================
-# Legacy Format Handler
+# Legacy Format Handler (Internal)
 # =============================================================================
 
 
-class LegacyFormatHandler:
-    """Handles legacy transcript formats."""
+class _LegacyFormatHandler:
+    """Handles legacy transcript formats. Internal use only."""
 
     def parse_legacy_tool_use(
         self, entry: dict, timestamp: Optional[datetime]
@@ -309,8 +309,8 @@ def parse_transcript_jsonl(content: str, session_id: str = "unknown") -> ParsedT
     messages: list[Message] = []
     all_tool_calls: list[ToolCall] = []
 
-    metadata = TranscriptMetadataExtractor()
-    legacy_handler = LegacyFormatHandler()
+    metadata = _TranscriptMetadataExtractor()
+    legacy_handler = _LegacyFormatHandler()
 
     for line_num, line in enumerate(content.strip().split("\n"), 1):
         line = line.strip()
@@ -344,7 +344,7 @@ def parse_transcript_jsonl(content: str, session_id: str = "unknown") -> ParsedT
 
         # Handle array content blocks
         elif isinstance(msg_content, list):
-            parser = ContentBlockParser(timestamp)
+            parser = _ContentBlockParser(timestamp)
             result = parser.parse_content_array(msg_content)
 
             # Collect tool calls
@@ -377,14 +377,3 @@ def parse_transcript_jsonl(content: str, session_id: str = "unknown") -> ParsedT
     )
 
 
-def extract_changed_files(transcript: ParsedTranscript) -> list[str]:
-    """
-    Extract list of files that were modified in the session.
-
-    Args:
-        transcript: Parsed transcript
-
-    Returns:
-        List of file paths that were edited
-    """
-    return transcript.files_edited
