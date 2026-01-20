@@ -9,8 +9,15 @@ import time
 from typing import Optional
 
 from src.configs import get_logger
-from src.exceptions import LLMConnectionError, LLMResponseError, LLMTimeoutError
-from src.utils.http_client import HTTPError, http_json_get, http_json_post
+from src.exceptions import (
+    HTTPConnectionError,
+    HTTPRequestError,
+    HTTPTimeoutError,
+    LLMConnectionError,
+    LLMResponseError,
+    LLMTimeoutError,
+)
+from src.utils.http_client import http_json_get, http_json_post
 
 from .provider import LLMConfig, LLMProvider, LLMResponse
 
@@ -50,7 +57,7 @@ class OllamaProvider(LLMProvider):
                 return True
             logger.debug("Ollama running but no models installed")
             return False
-        except (LLMConnectionError, LLMTimeoutError) as e:
+        except (HTTPConnectionError, HTTPTimeoutError) as e:
             logger.debug(f"Ollama not reachable: {e}")
             return False
         except Exception as e:
@@ -100,13 +107,13 @@ class OllamaProvider(LLMProvider):
                 provider=self.name,
             )
 
-        except LLMConnectionError as e:
+        except HTTPConnectionError as e:
             logger.error(f"Ollama connection error: {e}")
-            raise
-        except LLMTimeoutError as e:
+            raise LLMConnectionError(f"Ollama connection failed: {e}") from e
+        except HTTPTimeoutError as e:
             logger.error(f"Ollama timeout: {e}")
-            raise
-        except HTTPError as e:
+            raise LLMTimeoutError(f"Ollama request timed out: {e}") from e
+        except HTTPRequestError as e:
             logger.error(f"Ollama HTTP error: {e}")
             raise LLMResponseError(f"Ollama API error: {e}") from e
         except Exception as e:

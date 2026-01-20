@@ -10,8 +10,15 @@ import time
 from typing import Optional
 
 from src.configs import get_logger
-from src.exceptions import LLMConnectionError, LLMResponseError, LLMTimeoutError
-from src.utils.http_client import HTTPError, http_post
+from src.exceptions import (
+    HTTPConnectionError,
+    HTTPRequestError,
+    HTTPTimeoutError,
+    LLMConnectionError,
+    LLMResponseError,
+    LLMTimeoutError,
+)
+from src.utils.http_client import http_post
 
 from .provider import LLMConfig, LLMProvider, LLMResponse
 
@@ -110,11 +117,13 @@ class OpenRouterProvider(LLMProvider):
                 provider=self.name,
             )
 
-        except LLMConnectionError:
-            raise
-        except LLMTimeoutError:
-            raise
-        except HTTPError as e:
+        except HTTPConnectionError as e:
+            logger.error(f"OpenRouter connection error: {e}")
+            raise LLMConnectionError(f"OpenRouter connection failed: {e}") from e
+        except HTTPTimeoutError as e:
+            logger.error(f"OpenRouter timeout: {e}")
+            raise LLMTimeoutError(f"OpenRouter request timed out: {e}") from e
+        except HTTPRequestError as e:
             logger.error(f"OpenRouter HTTP error: {e}")
             raise LLMResponseError(f"OpenRouter API error: {e}") from e
         except Exception as e:

@@ -15,8 +15,15 @@ import time
 from typing import Optional
 
 from src.configs import get_logger
-from src.exceptions import LLMConnectionError, LLMResponseError, LLMTimeoutError
-from src.utils.http_client import HTTPError, http_get, http_json_post
+from src.exceptions import (
+    HTTPConnectionError,
+    HTTPRequestError,
+    HTTPTimeoutError,
+    LLMConnectionError,
+    LLMResponseError,
+    LLMTimeoutError,
+)
+from src.utils.http_client import http_get, http_json_post
 
 from .provider import LLMConfig, LLMProvider, LLMResponse
 
@@ -120,13 +127,13 @@ class ClaudeCLIProvider(LLMProvider):
                 provider=f"{self.name}+proxy",
             )
 
-        except LLMConnectionError as e:
+        except HTTPConnectionError as e:
             logger.error(f"Summarizer proxy connection error: {e}")
-            raise
-        except LLMTimeoutError as e:
+            raise LLMConnectionError(f"Summarizer proxy connection failed: {e}") from e
+        except HTTPTimeoutError as e:
             logger.error(f"Summarizer proxy timeout: {e}")
-            raise
-        except HTTPError as e:
+            raise LLMTimeoutError(f"Summarizer proxy timed out: {e}") from e
+        except HTTPRequestError as e:
             logger.error(f"Summarizer proxy HTTP error: {e}")
             raise LLMResponseError(f"Summarizer proxy error: {e}") from e
         except LLMResponseError:

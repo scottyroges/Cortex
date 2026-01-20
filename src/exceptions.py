@@ -171,6 +171,37 @@ class ClientError(CortexError):
     pass
 
 
+class HTTPRequestError(ClientError):
+    """HTTP request failed."""
+
+    def __init__(
+        self,
+        message: str,
+        status_code: int | None = None,
+        response_text: str | None = None,
+    ):
+        details = {}
+        if status_code is not None:
+            details["status_code"] = status_code
+        if response_text:
+            details["response_text"] = response_text[:200]
+        super().__init__(message, details)
+        self.status_code = status_code
+        self.response_text = response_text
+
+
+class HTTPConnectionError(ClientError):
+    """Failed to connect to HTTP endpoint."""
+
+    pass
+
+
+class HTTPTimeoutError(ClientError):
+    """HTTP request timed out."""
+
+    pass
+
+
 class DaemonNotRunningError(ClientError):
     """Cortex daemon is not running."""
 
