@@ -34,11 +34,16 @@ def mock_services(temp_db_dir):
     mock_searcher = MagicMock()
     mock_searcher.build_index = MagicMock()
 
-    with patch("src.tools.memory.memory.get_collection", return_value=collection), \
-         patch("src.tools.memory.memory.get_repo_path", return_value=None), \
-         patch("src.tools.memory.memory.get_searcher", return_value=mock_searcher), \
-         patch("src.tools.memory.memory.get_current_branch", return_value="main"), \
-         patch("src.tools.memory.memory.get_head_commit", return_value="abc123"), \
+    with patch("src.tools.memory.helpers.get_collection", return_value=collection), \
+         patch("src.tools.memory.helpers.get_repo_path", return_value=None), \
+         patch("src.tools.memory.save.get_searcher", return_value=mock_searcher), \
+         patch("src.tools.memory.session.get_searcher", return_value=mock_searcher), \
+         patch("src.tools.memory.validate.get_searcher", return_value=mock_searcher), \
+         patch("src.tools.memory.validate.get_collection", return_value=collection), \
+         patch("src.tools.memory.validate.get_repo_path", return_value=None), \
+         patch("src.tools.memory.validate.get_head_commit", return_value="abc123"), \
+         patch("src.tools.memory.helpers.get_current_branch", return_value="main"), \
+         patch("src.tools.memory.helpers.get_head_commit", return_value="abc123"), \
          patch("src.tools.initiatives.initiatives.get_collection", return_value=collection), \
          patch("src.tools.initiatives.focus.get_collection", return_value=collection):
         yield collection
@@ -210,18 +215,18 @@ class TestResolveRepository:
 
     def test_explicit_repository(self, mock_services):
         """Test that explicit repository is used."""
-        from src.tools.memory.memory import _resolve_repository
+        from src.tools.memory.helpers import resolve_repository
 
-        with patch("src.tools.memory.memory.get_repo_path", return_value="/some/path"):
-            result = _resolve_repository("ExplicitRepo")
+        with patch("src.tools.memory.helpers.get_repo_path", return_value="/some/path"):
+            result = resolve_repository("ExplicitRepo")
             assert result == "ExplicitRepo"
 
     def test_repository_from_cwd(self, mock_services):
         """Test repository detection from current working directory."""
-        from src.tools.memory.memory import _resolve_repository
+        from src.tools.memory.helpers import resolve_repository
 
-        with patch("src.tools.memory.memory.get_repo_path", return_value="/path/to/MyRepo"):
-            result = _resolve_repository(None)
+        with patch("src.tools.memory.helpers.get_repo_path", return_value="/path/to/MyRepo"):
+            result = resolve_repository(None)
             assert result == "MyRepo"
 
     def test_repository_from_focus(self, mock_services):
@@ -240,19 +245,19 @@ class TestResolveRepository:
             }],
         )
 
-        from src.tools.memory.memory import _resolve_repository
+        from src.tools.memory.helpers import resolve_repository
 
-        with patch("src.tools.memory.memory.get_repo_path", return_value=None):
-            result = _resolve_repository(None)
+        with patch("src.tools.memory.helpers.get_repo_path", return_value=None):
+            result = resolve_repository(None)
             assert result == "FocusedRepo"
 
     def test_repository_fallback_to_global(self, mock_services):
         """Test fallback to 'global' when no detection works."""
-        from src.tools.memory.memory import _resolve_repository
+        from src.tools.memory.helpers import resolve_repository
 
-        with patch("src.tools.memory.memory.get_repo_path", return_value=None), \
-             patch("src.tools.memory.memory.get_any_focused_repository", return_value=None):
-            result = _resolve_repository(None)
+        with patch("src.tools.memory.helpers.get_repo_path", return_value=None), \
+             patch("src.tools.memory.helpers.get_any_focused_repository", return_value=None):
+            result = resolve_repository(None)
             assert result == "global"
 
 
@@ -260,10 +265,10 @@ class TestBuildBaseContext:
     """Tests for the _build_base_context helper."""
 
     def test_builds_complete_context(self, mock_services):
-        """Test that _build_base_context returns all expected fields."""
-        from src.tools.memory.memory import _build_base_context
+        """Test that build_base_context returns all expected fields."""
+        from src.tools.memory.helpers import build_base_context
 
-        ctx = _build_base_context("TestRepo", None)
+        ctx = build_base_context("TestRepo", None)
 
         assert "repo" in ctx
         assert "collection" in ctx
@@ -307,9 +312,9 @@ class TestBuildBaseContext:
             }],
         )
 
-        from src.tools.memory.memory import _build_base_context
+        from src.tools.memory.helpers import build_base_context
 
-        ctx = _build_base_context("TestRepo", None)
+        ctx = build_base_context("TestRepo", None)
 
         assert ctx["initiative_id"] == "initiative:ctx123"
         assert ctx["initiative_name"] == "Context Test"
@@ -321,31 +326,31 @@ class TestComputeFileHashes:
     def test_computes_hashes_for_existing_files(self, temp_db_dir):
         """Test that file hashes are computed for files that exist."""
         import os
-        from src.tools.memory.memory import _compute_file_hashes
+        from src.tools.memory.helpers import compute_file_hashes
 
         # Create a test file
         test_file = os.path.join(temp_db_dir, "test.py")
         with open(test_file, "w") as f:
             f.write("print('hello')")
 
-        hashes = _compute_file_hashes(["test.py"], temp_db_dir)
+        hashes = compute_file_hashes(["test.py"], temp_db_dir)
 
         assert "test.py" in hashes
         assert len(hashes["test.py"]) > 0
 
     def test_skips_nonexistent_files(self, temp_db_dir):
         """Test that nonexistent files are skipped."""
-        from src.tools.memory.memory import _compute_file_hashes
+        from src.tools.memory.helpers import compute_file_hashes
 
-        hashes = _compute_file_hashes(["nonexistent.py"], temp_db_dir)
+        hashes = compute_file_hashes(["nonexistent.py"], temp_db_dir)
 
         assert "nonexistent.py" not in hashes
 
     def test_returns_empty_without_repo_path(self):
         """Test that empty dict is returned when repo_path is None."""
-        from src.tools.memory.memory import _compute_file_hashes
+        from src.tools.memory.helpers import compute_file_hashes
 
-        hashes = _compute_file_hashes(["file.py"], None)
+        hashes = compute_file_hashes(["file.py"], None)
 
         assert hashes == {}
 
@@ -431,7 +436,7 @@ class TestSearchIndexRebuild:
         """Test that search index is rebuilt after saving a note."""
         from src.tools.memory import save_memory
 
-        with patch("src.tools.memory.memory.get_searcher") as mock_get_searcher:
+        with patch("src.tools.memory.save.get_searcher") as mock_get_searcher:
             mock_searcher = MagicMock()
             mock_get_searcher.return_value = mock_searcher
 
@@ -447,7 +452,7 @@ class TestSearchIndexRebuild:
         """Test that search index is rebuilt after concluding session."""
         from src.tools.memory import conclude_session
 
-        with patch("src.tools.memory.memory.get_searcher") as mock_get_searcher:
+        with patch("src.tools.memory.session.get_searcher") as mock_get_searcher:
             mock_searcher = MagicMock()
             mock_get_searcher.return_value = mock_searcher
 

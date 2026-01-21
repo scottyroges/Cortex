@@ -275,11 +275,15 @@ class TestValidateInsight:
         mock_searcher = MagicMock()
         mock_searcher.build_index = MagicMock()
 
-        with patch("src.tools.memory.memory.get_collection", return_value=collection), \
-             patch("src.tools.memory.memory.get_repo_path", return_value=None), \
-             patch("src.tools.memory.memory.get_searcher", return_value=mock_searcher), \
-             patch("src.tools.memory.memory.get_current_branch", return_value="main"), \
-             patch("src.tools.memory.memory.get_head_commit", return_value="abc123"), \
+        with patch("src.tools.memory.helpers.get_collection", return_value=collection), \
+             patch("src.tools.memory.helpers.get_repo_path", return_value=None), \
+             patch("src.tools.memory.save.get_searcher", return_value=mock_searcher), \
+             patch("src.tools.memory.validate.get_searcher", return_value=mock_searcher), \
+             patch("src.tools.memory.validate.get_collection", return_value=collection), \
+             patch("src.tools.memory.validate.get_repo_path", return_value=None), \
+             patch("src.tools.memory.validate.get_head_commit", return_value="abc123"), \
+             patch("src.tools.memory.helpers.get_current_branch", return_value="main"), \
+             patch("src.tools.memory.helpers.get_head_commit", return_value="abc123"), \
              patch("src.tools.initiatives.initiatives.get_collection", return_value=collection), \
              patch("src.tools.initiatives.focus.get_collection", return_value=collection):
             yield collection
