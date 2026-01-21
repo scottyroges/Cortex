@@ -1023,7 +1023,7 @@ class TestSyncAsyncConfig:
 
     def test_configure_cortex_get_status_includes_autocapture(self):
         """configure_cortex(get_status=True) includes autocapture config."""
-        from src.tools.configure.admin import configure_cortex
+        from src.tools.configure.config import configure_cortex
 
         status = json.loads(configure_cortex(get_status=True))
         assert "autocapture" in status
@@ -1036,7 +1036,7 @@ class TestSyncAsyncConfig:
         self, mock_create, mock_save, mock_load
     ):
         """configure_cortex can set autocapture_async."""
-        from src.tools.configure.admin import configure_cortex
+        from src.tools.configure.config import configure_cortex
 
         mock_load.return_value = {"autocapture": {"significance": {}}, "llm": {}}
         mock_save.return_value = True

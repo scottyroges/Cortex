@@ -444,7 +444,7 @@ class MetadataFileProcessor:
 # =============================================================================
 
 
-def ingest_codebase(
+def run_ingestion(
     root_path: str,
     collection: chromadb.Collection,
     repo_id: Optional[str] = None,

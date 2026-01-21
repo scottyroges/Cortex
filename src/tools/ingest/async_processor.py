@@ -403,7 +403,7 @@ class IngestionWorker:
 
     def _execute_ingestion(self, task: IngestionTask) -> None:
         """Execute a single ingestion task with progress callbacks."""
-        from src.tools.ingest.engine import ingest_codebase
+        from src.tools.ingest.engine import run_ingestion
         from src.external.llm import get_provider
         from src.configs.services import CONFIG, get_collection, get_searcher
 
@@ -428,7 +428,7 @@ class IngestionWorker:
                     logger.warning(f"Could not get LLM provider: {e}")
 
             # Execute ingestion with progress tracking
-            stats = ingest_codebase(
+            stats = run_ingestion(
                 root_path=task.path,
                 collection=collection,
                 repo_id=task.repository,

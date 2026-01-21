@@ -18,7 +18,7 @@ Consolidated tool set (12 tools):
 12. delete_document - Delete a single document
 """
 
-from src.tools.configure.admin import configure_cortex
+from src.tools.configure.config import configure_cortex
 from src.tools.ingest.ingest import ingest_codebase
 from src.tools.ingest.skeleton import get_skeleton
 from src.tools.initiatives.initiatives import manage_initiative

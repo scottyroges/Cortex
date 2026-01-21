@@ -420,7 +420,7 @@ def check_version_updates(project_path: str) -> dict[str, Any]:
     result: dict[str, Any] = {}
 
     try:
-        from src.version import check_for_updates, get_current_version
+        from src.tools.orient.version import check_for_updates, get_current_version
 
         current = get_current_version()
         result["current_version"] = current["version"]

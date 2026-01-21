@@ -16,7 +16,7 @@ from typing import Literal, Optional
 
 from src.configs import get_logger
 from src.external.git import get_current_branch
-from src.tools.ingest import ingest_codebase as _ingest_codebase_engine
+from src.tools.ingest.engine import run_ingestion
 from src.tools.ingest.engine import select_delta_strategy
 from src.external.llm import get_provider
 from src.configs.services import CONFIG, get_collection, get_searcher
@@ -234,7 +234,7 @@ def _run_sync_ingestion(
             except Exception as e:
                 logger.warning(f"Could not get LLM provider for metadata descriptions: {e}")
 
-        stats = _ingest_codebase_engine(
+        stats = run_ingestion(
             root_path=path,
             collection=collection,
             repo_id=repository,
@@ -300,6 +300,3 @@ def ingest_code_into_cortex(
     return _ingest(path, repository, force_full, include_patterns, use_cortexignore)
 
 
-def get_ingest_status(task_id: str) -> str:
-    """Backward-compatible alias for _get_status."""
-    return _get_status(task_id)
