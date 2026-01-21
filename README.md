@@ -53,7 +53,9 @@ This will ask you for:
 cortex daemon start
 ```
 
-This builds the Docker image (first time only) and starts the daemon.
+This pulls the pre-built Docker image from GHCR (or builds locally if unavailable) and starts the daemon.
+
+> **Pre-built images**: Cortex automatically pulls images from `ghcr.io/scottyroges/cortex`. No Docker Hub account or local builds required.
 
 ### 4. Add to Claude Code
 
@@ -455,7 +457,7 @@ cortex update
 This will:
 1. Create a backup of the database
 2. Pull the latest code (if installed via git clone)
-3. Rebuild the Docker image
+3. Pull the latest Docker image from GHCR (falls back to local build if unavailable)
 4. Run any pending migrations
 5. Restart the daemon
 
@@ -463,9 +465,9 @@ This will:
 
 To create a new release:
 
-1. **Update version number** in `src/version.py`:
+1. **Update version number** in `src/__init__.py`:
    ```python
-   "version": "1.1.0",  # Update this
+   __version__ = "1.1.0"  # Update this
    ```
 
 2. **Run the test suite**:
@@ -473,15 +475,21 @@ To create a new release:
    pytest tests/ -v
    ```
 
-3. **Commit and tag**:
+3. **Commit and push**:
    ```bash
    git add -A
-   git commit -m "Release v1.1.0"
-   git tag v1.1.0
-   git push origin main --tags
+   git commit -m "Bump version to 1.1.0"
+   git push origin main
    ```
 
-4. **Verify** users can update:
+4. **GitHub Actions handles the rest automatically**:
+   - Detects the new version in `src/__init__.py`
+   - Checks if version already exists (skips if so)
+   - Builds multi-platform Docker image (amd64/arm64)
+   - Publishes to `ghcr.io/scottyroges/cortex:1.1.0` and `:latest`
+   - Creates and pushes git tag `v1.1.0`
+
+5. **Verify** users can update:
    ```bash
    cortex update
    cortex doctor --verbose  # Should show new version

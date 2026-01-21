@@ -41,6 +41,7 @@ DAEMON_CONTAINER_NAME="cortex-daemon"
 CORTEX_PORT="${CORTEX_PORT:-8000}"
 SUMMARIZER_PORT="${CORTEX_SUMMARIZER_PORT:-8081}"
 IMAGE_NAME="cortex"
+GHCR_IMAGE="ghcr.io/scottyroges/cortex"
 
 # Summarizer PID file (for claude-cli LLM provider)
 SUMMARIZER_PID_FILE="$HOME/.cortex/summarizer.pid"
@@ -164,11 +165,38 @@ build_image() {
     fi
 }
 
-build_image_if_needed() {
-    # Build if image doesn't exist or source is newer
-    if ! docker image inspect "$IMAGE_NAME" >/dev/null 2>&1; then
-        build_image
+pull_image() {
+    # Pull pre-built image from GHCR
+    # Returns 0 on success, 1 on failure
+    local tag="${1:-latest}"
+    local full_image="$GHCR_IMAGE:$tag"
+
+    log_info "Pulling image from GHCR: $full_image"
+
+    if docker pull "$full_image" >&2; then
+        # Tag as local image name for consistency
+        docker tag "$full_image" "$IMAGE_NAME" >&2
+        log_info "Image pulled and tagged as $IMAGE_NAME"
+        return 0
+    else
+        log_info "Pull failed, will fall back to local build"
+        return 1
     fi
+}
+
+build_image_if_needed() {
+    # Use existing image if available
+    if docker image inspect "$IMAGE_NAME" >/dev/null 2>&1; then
+        return 0
+    fi
+
+    # Try pulling from GHCR first, fall back to local build
+    if pull_image; then
+        return 0
+    fi
+
+    log_info "Building image locally..."
+    build_image
 }
 
 is_daemon_running() {
@@ -647,6 +675,21 @@ run_bridge() {
 # --- Update Command ---
 
 do_update() {
+    local force_build=false
+
+    # Parse options
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --build|-b)
+                force_build=true
+                shift
+                ;;
+            *)
+                shift
+                ;;
+        esac
+    done
+
     echo "Cortex Update"
     echo "============="
     echo ""
@@ -720,9 +763,17 @@ print(data.get('git_commit', 'unknown')[:7])
     stop_daemon
     echo ""
 
-    # Step 5: Rebuild image
-    echo "Rebuilding image..."
-    build_image
+    # Step 5: Pull or rebuild image
+    echo "Updating image..."
+    if [ "$force_build" = true ]; then
+        echo "  Building locally (--build flag)..."
+        build_image
+    elif pull_image; then
+        echo "  Image pulled from GHCR"
+    else
+        echo "  Pull failed, building locally..."
+        build_image
+    fi
     echo ""
 
     # Step 6: Start daemon (migrations run automatically)
@@ -1451,7 +1502,8 @@ COMMANDS:
     initiative <action> Manage initiatives (create, list, focus, complete)
     ingest [path]       Index a codebase into memory (--status to check progress)
     backup <action>     Manage backups (create, list)
-    update              Update Cortex (pull, rebuild, migrate, restart)
+    update [--build]    Update Cortex (pull image from GHCR, migrate, restart)
+                        Use --build to force local image build
     doctor              Check system health (add --verbose for full check)
     init                Interactive setup, creates ~/.cortex/config.yaml
     config              Show current configuration
@@ -1465,7 +1517,7 @@ COMMANDS:
     daemon restart      Restart the daemon (rebuilds image)
     daemon status       Check daemon status and build info
     daemon logs         View daemon logs (follows output)
-    daemon rebuild      Stop, rebuild image, and restart daemon
+    daemon rebuild [-b] Stop, pull/rebuild image, and restart (--build for local)
     stop                Shortcut for 'daemon stop'
     logs                Shortcut for 'daemon logs'
     rebuild             Shortcut for 'daemon rebuild'
@@ -1531,8 +1583,16 @@ case "${1:-}" in
                 stop_daemon
                 ;;
             restart)
+                local force_build=false
+                if [ "${3:-}" = "--build" ] || [ "${3:-}" = "-b" ]; then
+                    force_build=true
+                fi
                 stop_daemon
-                build_image
+                if [ "$force_build" = true ]; then
+                    build_image
+                elif ! pull_image; then
+                    build_image
+                fi
                 start_daemon
                 ;;
             status)
@@ -1542,8 +1602,16 @@ case "${1:-}" in
                 daemon_logs
                 ;;
             rebuild)
+                local force_build=false
+                if [ "${3:-}" = "--build" ] || [ "${3:-}" = "-b" ]; then
+                    force_build=true
+                fi
                 stop_daemon
-                build_image
+                if [ "$force_build" = true ]; then
+                    build_image
+                elif ! pull_image; then
+                    build_image
+                fi
                 start_daemon
                 ;;
             *)
@@ -1576,8 +1644,16 @@ case "${1:-}" in
         daemon_logs
         ;;
     rebuild)
+        local force_build=false
+        if [ "${2:-}" = "--build" ] || [ "${2:-}" = "-b" ]; then
+            force_build=true
+        fi
         stop_daemon
-        build_image
+        if [ "$force_build" = true ]; then
+            build_image
+        elif ! pull_image; then
+            build_image
+        fi
         start_daemon
         ;;
     search)
@@ -1604,7 +1680,8 @@ case "${1:-}" in
         cli_backup "$@"
         ;;
     update)
-        do_update
+        shift
+        do_update "$@"
         ;;
     hooks)
         case "${2:-status}" in

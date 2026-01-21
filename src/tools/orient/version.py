@@ -8,6 +8,7 @@ import os
 import time
 from typing import Optional
 
+from src import __version__
 from src.configs import get_logger
 from src.utils.http_client import http_json_get
 
@@ -31,7 +32,7 @@ def get_current_version() -> dict:
     return {
         "git_commit": os.environ.get("CORTEX_GIT_COMMIT", "unknown"),
         "build_time": os.environ.get("CORTEX_BUILD_TIME", "unknown"),
-        "version": "2.0.0",
+        "version": __version__,
     }
 
 

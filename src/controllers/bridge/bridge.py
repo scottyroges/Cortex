@@ -15,6 +15,7 @@ import time
 
 import requests
 
+from src import __version__
 from src.configs import get_logger, setup_logging
 
 setup_logging()
@@ -51,7 +52,7 @@ def handle_initialize(request: dict) -> dict:
             },
             "serverInfo": {
                 "name": "cortex",
-                "version": "1.0.0",
+                "version": __version__,
             },
         },
     }

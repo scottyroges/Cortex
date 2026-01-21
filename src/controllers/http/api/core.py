@@ -14,6 +14,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
+from src import __version__
 from src.configs import get_logger
 from src.configs.services import get_collection, get_reranker, get_searcher
 from src.utils.secret_scrubber import scrub_secrets
@@ -219,5 +220,5 @@ def info() -> dict[str, str]:
         "git_commit": os.environ.get("CORTEX_GIT_COMMIT", "unknown"),
         "build_time": os.environ.get("CORTEX_BUILD_TIME", "unknown"),
         "startup_time": get_startup_time(),
-        "version": "1.0.0",
+        "version": __version__,
     }
