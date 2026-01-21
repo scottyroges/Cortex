@@ -10,52 +10,23 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from src.configs import get_logger
+from src.configs.services import CONFIG, get_collection, get_reranker, get_repo_path, get_searcher
+from src.external.git import get_current_branch
 from src.models import (
     ALL_DOCUMENT_TYPES,
     BRANCH_FILTERED_TYPES,
     METADATA_ONLY_TYPES,
     SEARCH_PRESETS,
 )
-from src.external.git import get_current_branch
+from src.tools.initiatives.focus import get_focus_id
+from src.tools.initiatives.utils import resolve_initiative_id
 from src.tools.search import apply_recency_boost, apply_type_boost
-from src.configs.services import CONFIG, get_collection, get_reranker, get_repo_path, get_searcher
 from src.tools.search.staleness import check_insight_staleness, check_note_staleness, format_verification_warning
 
 logger = get_logger("tools.search")
 
 # Initiative boost factor for focused initiative content
 INITIATIVE_BOOST_FACTOR = 1.3
-
-
-def _resolve_initiative_id(collection, repository: Optional[str], initiative: str) -> Optional[str]:
-    """Resolve initiative name to ID."""
-    if initiative.startswith("initiative:"):
-        return initiative
-
-    try:
-        where_filter = {"$and": [{"type": "initiative"}, {"name": initiative}]}
-        if repository:
-            where_filter["$and"].append({"repository": repository})
-
-        result = collection.get(where=where_filter, include=[])
-        if result["ids"]:
-            return result["ids"][0]
-    except Exception as e:
-        logger.warning(f"Failed to resolve initiative: {e}")
-
-    return None
-
-
-def _get_focused_initiative_id(collection, repository: str) -> Optional[str]:
-    """Get the focused initiative ID for a repository."""
-    try:
-        focus_id = f"{repository}:focus"
-        result = collection.get(ids=[focus_id], include=["metadatas"])
-        if result["ids"]:
-            return result["metadatas"][0].get("initiative_id")
-    except Exception as e:
-        logger.warning(f"Failed to get focused initiative: {e}")
-    return None
 
 
 def _apply_initiative_boost(
@@ -276,7 +247,7 @@ class SearchPipeline:
     def _resolve_initiative_context(self) -> None:
         """Resolve initiative filtering and boosting context."""
         if self.initiative:
-            self._initiative_id = _resolve_initiative_id(
+            self._initiative_id = resolve_initiative_id(
                 self._collection, self.repository, self.initiative
             )
             if self._initiative_id:
@@ -284,7 +255,7 @@ class SearchPipeline:
 
         # Get focused initiative for boosting (if no specific initiative filter)
         if not self._initiative_id and self.repository:
-            self._focused_initiative_id = _get_focused_initiative_id(
+            self._focused_initiative_id = get_focus_id(
                 self._collection, self.repository
             )
 

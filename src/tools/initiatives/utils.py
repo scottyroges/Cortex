@@ -2,15 +2,25 @@
 Initiative Utilities
 
 Shared helper functions for initiative management across tools.
-Consolidates duplicated logic from initiatives.py, notes.py, and recall.py.
+Includes lookup, resolution, duration calculation, and detection utilities.
 """
 
-from datetime import datetime, timezone
+import re
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from src.configs import get_logger
 
-logger = get_logger("tools.initiative_utils")
+logger = get_logger("tools.initiatives.utils")
+
+# Completion signal keywords
+COMPLETION_SIGNALS = [
+    "complete", "completed", "done", "finished", "final",
+    "shipped", "merged", "released", "wrapped up", "closes",
+]
+
+# Default stale threshold in days
+STALE_THRESHOLD_DAYS = 5
 
 
 def find_initiative(
@@ -58,6 +68,41 @@ def find_initiative(
             "document": result["documents"][0],
             "metadata": result["metadatas"][0],
         }
+
+    return None
+
+
+def resolve_initiative_id(
+    collection,
+    repository: Optional[str],
+    initiative: str,
+) -> Optional[str]:
+    """
+    Resolve initiative name to ID.
+
+    Lightweight version of find_initiative when you only need the ID.
+
+    Args:
+        collection: ChromaDB collection
+        repository: Optional repository filter
+        initiative: Initiative ID or name
+
+    Returns:
+        Initiative ID or None
+    """
+    if initiative.startswith("initiative:"):
+        return initiative
+
+    try:
+        where_filter = {"$and": [{"type": "initiative"}, {"name": initiative}]}
+        if repository:
+            where_filter["$and"].append({"repository": repository})
+
+        result = collection.get(where=where_filter, include=[])
+        if result["ids"]:
+            return result["ids"][0]
+    except Exception as e:
+        logger.warning(f"Failed to resolve initiative: {e}")
 
     return None
 
@@ -150,3 +195,46 @@ def calculate_duration_from_now(start_timestamp: str) -> str:
         Human-readable duration string
     """
     return calculate_duration(start_timestamp, datetime.now(timezone.utc).isoformat())
+
+
+def detect_completion_signals(text: str) -> bool:
+    """
+    Detect if text contains completion signals.
+
+    Args:
+        text: Text to check (e.g., commit summary)
+
+    Returns:
+        True if completion signals detected
+    """
+    text_lower = text.lower()
+    for signal in COMPLETION_SIGNALS:
+        # Match word boundaries
+        if re.search(rf"\b{re.escape(signal)}\b", text_lower):
+            return True
+    return False
+
+
+def check_initiative_staleness(
+    updated_at: str,
+    threshold_days: int = STALE_THRESHOLD_DAYS,
+) -> tuple[bool, int]:
+    """
+    Check if an initiative is stale (inactive for too long).
+
+    Args:
+        updated_at: Last update timestamp (ISO format)
+        threshold_days: Number of days before considered stale
+
+    Returns:
+        Tuple of (is_stale, days_inactive)
+    """
+    try:
+        updated = datetime.fromisoformat(updated_at.replace("Z", "+00:00"))
+        now = datetime.now(timezone.utc)
+        delta = now - updated
+        days_inactive = delta.days
+
+        return (days_inactive >= threshold_days, days_inactive)
+    except Exception:
+        return (False, 0)

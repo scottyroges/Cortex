@@ -6,27 +6,29 @@ Initiatives track work across sessions and tag commits/notes for context restora
 """
 
 import json
-import re
 import uuid
-from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Literal, Optional
 
 from src.configs import get_logger
-from src.external.git import get_current_branch
-from src.tools.initiatives.initiative_utils import calculate_duration, calculate_duration_from_now, find_initiative
 from src.configs.services import get_collection, get_repo_path, get_searcher
+from src.external.git import get_current_branch
+from src.tools.initiatives.focus import (
+    clear_focus,
+    get_focus,
+    get_focused_initiative,
+    set_focus,
+)
+from src.tools.initiatives.utils import (
+    STALE_THRESHOLD_DAYS,
+    calculate_duration,
+    calculate_duration_from_now,
+    check_initiative_staleness,
+    detect_completion_signals,
+    find_initiative,
+)
 
 logger = get_logger("tools.initiatives")
-
-# Completion signal keywords
-COMPLETION_SIGNALS = [
-    "complete", "completed", "done", "finished", "final",
-    "shipped", "merged", "released", "wrapped up", "closes",
-]
-
-# Default stale threshold in days
-STALE_THRESHOLD_DAYS = 5
 
 
 def manage_initiative(
@@ -160,7 +162,7 @@ def _create_initiative(
         # Auto-focus if requested
         focus_result = None
         if auto_focus:
-            focus_result = _set_focus(collection, repository, initiative_id, name, timestamp)
+            focus_result = set_focus(collection, repository, initiative_id, name, timestamp)
 
         # Rebuild search index
         get_searcher().build_index()
@@ -225,7 +227,7 @@ def _list_initiatives(
         )
 
         # Get current focus
-        focus = _get_focus(collection, repository)
+        focus = get_focus(collection, repository)
 
         # Get commit/note counts for each initiative
         initiatives = []
@@ -308,7 +310,7 @@ def _focus_initiative(
             })
 
         # Set focus
-        _set_focus(collection, repository, initiative_id, meta.get("name", ""), timestamp)
+        set_focus(collection, repository, initiative_id, meta.get("name", ""), timestamp)
 
         # Get recent context (commits/notes from this initiative)
         recent_context = _get_recent_context(collection, initiative_id, limit=5)
@@ -390,9 +392,9 @@ def _complete_initiative(
         )
 
         # Clear focus if this was focused
-        focus = _get_focus(collection, repo)
+        focus = get_focus(collection, repo)
         if focus and focus.get("initiative_id") == initiative_id:
-            _clear_focus(collection, repo)
+            clear_focus(collection, repo)
 
         # Get archive stats
         session_count, note_count = _count_initiative_items(collection, initiative_id)
@@ -425,62 +427,6 @@ def _complete_initiative(
 
 
 # --- Helper Functions ---
-
-
-def _set_focus(
-    collection,
-    repository: str,
-    initiative_id: str,
-    initiative_name: str,
-    timestamp: str,
-) -> dict:
-    """Set focus to an initiative."""
-    focus_id = f"{repository}:focus"
-    collection.upsert(
-        ids=[focus_id],
-        documents=[f"Current focus: {initiative_name}"],
-        metadatas=[{
-            "type": "focus",
-            "repository": repository,
-            "initiative_id": initiative_id,
-            "initiative_name": initiative_name,
-            "created_at": timestamp,
-            "updated_at": timestamp,
-        }],
-    )
-    return {"initiative_id": initiative_id, "initiative_name": initiative_name}
-
-
-def _get_focus(collection, repository: str) -> Optional[dict]:
-    """Get current focus for a repository."""
-    try:
-        focus_id = f"{repository}:focus"
-        result = collection.get(
-            ids=[focus_id],
-            include=["metadatas"],
-        )
-        if result["ids"]:
-            meta = result["metadatas"][0]
-            return {
-                "initiative_id": meta.get("initiative_id", ""),
-                "initiative_name": meta.get("initiative_name", ""),
-            }
-    except Exception as e:
-        logger.warning(f"Failed to get focus: {e}")
-    return None
-
-
-def _clear_focus(collection, repository: str) -> None:
-    """Clear focus for a repository."""
-    try:
-        focus_id = f"{repository}:focus"
-        collection.delete(ids=[focus_id])
-    except Exception as e:
-        logger.warning(f"Failed to clear focus: {e}")
-
-
-# Backwards compatibility alias
-_find_initiative = find_initiative
 
 
 def _count_initiative_items(collection, initiative_id: str) -> tuple[int, int]:
@@ -542,73 +488,6 @@ def _get_recent_context(collection, initiative_id: str, limit: int = 5) -> list:
         logger.warning(f"Failed to get recent context: {e}")
 
     return context
-
-
-# Backwards compatibility alias
-_calculate_duration = calculate_duration
-
-
-def get_focused_initiative(repository: str) -> Optional[dict]:
-    """
-    Get the currently focused initiative for a repository.
-
-    This is a utility function for other tools (commit, note) to use.
-
-    Args:
-        repository: Repository identifier
-
-    Returns:
-        Dict with initiative_id and initiative_name, or None
-    """
-    try:
-        collection = get_collection()
-        return _get_focus(collection, repository)
-    except Exception as e:
-        logger.warning(f"Failed to get focused initiative: {e}")
-        return None
-
-
-def detect_completion_signals(text: str) -> bool:
-    """
-    Detect if text contains completion signals.
-
-    Args:
-        text: Text to check (e.g., commit summary)
-
-    Returns:
-        True if completion signals detected
-    """
-    text_lower = text.lower()
-    for signal in COMPLETION_SIGNALS:
-        # Match word boundaries
-        if re.search(rf"\b{re.escape(signal)}\b", text_lower):
-            return True
-    return False
-
-
-def check_initiative_staleness(
-    updated_at: str,
-    threshold_days: int = STALE_THRESHOLD_DAYS,
-) -> tuple[bool, int]:
-    """
-    Check if an initiative is stale (inactive for too long).
-
-    Args:
-        updated_at: Last update timestamp (ISO format)
-        threshold_days: Number of days before considered stale
-
-    Returns:
-        Tuple of (is_stale, days_inactive)
-    """
-    try:
-        updated = datetime.fromisoformat(updated_at.replace("Z", "+00:00"))
-        now = datetime.now(timezone.utc)
-        delta = now - updated
-        days_inactive = delta.days
-
-        return (days_inactive >= threshold_days, days_inactive)
-    except Exception:
-        return (False, 0)
 
 
 def _summarize_initiative(

@@ -19,7 +19,7 @@ from src.configs import get_logger
 from src.external.git import get_current_branch, get_head_commit
 from src.tools.ingest.walker import compute_file_hash
 from src.utils.secret_scrubber import scrub_secrets
-from src.tools.initiatives.initiative_utils import find_initiative, resolve_initiative
+from src.tools.initiatives.utils import find_initiative, resolve_initiative
 from src.configs.services import CONFIG, get_collection, get_repo_path, get_searcher
 
 if TYPE_CHECKING:

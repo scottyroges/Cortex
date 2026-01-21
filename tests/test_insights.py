@@ -33,7 +33,8 @@ def mock_services(temp_db_dir):
          patch("src.tools.memory.memory.get_repo_path", return_value=None), \
          patch("src.tools.memory.memory.get_searcher", return_value=mock_searcher), \
          patch("src.tools.memory.memory.get_current_branch", return_value="main"), \
-         patch("src.tools.initiatives.initiatives.get_collection", return_value=collection):
+         patch("src.tools.initiatives.initiatives.get_collection", return_value=collection), \
+         patch("src.tools.initiatives.focus.get_collection", return_value=collection):
         yield collection
 
 
