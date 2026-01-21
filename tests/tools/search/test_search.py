@@ -1,12 +1,9 @@
 """
-Tests for search and utility modules
+Tests for search functionality (src/tools/search/).
 """
-
-from pathlib import Path
 
 import pytest
 
-from src.external.git import get_current_branch, get_git_info
 from src.tools.search import (
     BM25Index,
     HybridSearcher,
@@ -14,125 +11,7 @@ from src.tools.search import (
     apply_recency_boost,
     reciprocal_rank_fusion,
 )
-from src.utils.secret_scrubber import scrub_secrets
-from src.storage import get_collection_stats, get_or_create_collection
-
-
-class TestSecretScrubbing:
-    """Tests for secret scrubbing functionality."""
-
-    def test_aws_access_key_scrubbed(self):
-        """Test AWS access key is redacted."""
-        text = 'AWS_KEY = "AKIAIOSFODNN7EXAMPLE"'
-        result = scrub_secrets(text)
-        assert "AKIAIOSFODNN7EXAMPLE" not in result
-        assert "[AWS_ACCESS_KEY_REDACTED]" in result
-
-    def test_github_pat_scrubbed(self):
-        """Test GitHub PAT is redacted."""
-        text = "token = ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-        result = scrub_secrets(text)
-        assert "ghp_" not in result
-        assert "[GITHUB_PAT_REDACTED]" in result
-
-    def test_stripe_key_scrubbed(self):
-        """Test Stripe secret key is redacted."""
-        # Key must be 24+ chars after sk_test_ to match pattern
-        text = "STRIPE_KEY = sk_test_TESTKEY1234567890abcdefgh"
-        result = scrub_secrets(text)
-        assert "sk_test_" not in result
-        assert "[STRIPE_SECRET_REDACTED]" in result
-
-    def test_anthropic_key_scrubbed(self):
-        """Test Anthropic API key is redacted."""
-        text = "ANTHROPIC_API_KEY = sk-ant-api03-xxxxxxxxxxxxxxxxxxxxx"
-        result = scrub_secrets(text)
-        assert "sk-ant-" not in result
-        assert "[ANTHROPIC_KEY_REDACTED]" in result
-
-    def test_private_key_scrubbed(self):
-        """Test private key header is redacted."""
-        text = "-----BEGIN RSA PRIVATE KEY-----\nMIIE..."
-        result = scrub_secrets(text)
-        assert "BEGIN RSA PRIVATE KEY" not in result
-        assert "[PRIVATE_KEY_REDACTED]" in result
-
-    def test_slack_token_scrubbed(self):
-        """Test Slack token is redacted."""
-        text = "SLACK_TOKEN = xoxb-123456789-abcdefghijk"
-        result = scrub_secrets(text)
-        assert "xoxb-" not in result
-        assert "[SLACK_TOKEN_REDACTED]" in result
-
-    def test_normal_text_preserved(self):
-        """Test normal text is not modified."""
-        text = "This is normal code without any secrets. URL = https://api.example.com"
-        result = scrub_secrets(text)
-        assert result == text
-
-    def test_generic_api_key_scrubbed(self):
-        """Test generic API key assignments are redacted."""
-        text = 'api_key = "super_secret_key_12345678"'
-        result = scrub_secrets(text)
-        assert "super_secret_key" not in result
-        assert "[SECRET_REDACTED]" in result
-
-
-class TestGitDetection:
-    """Tests for git information detection."""
-
-    def test_git_repo_detection(self, temp_git_repo: Path):
-        """Test detection of git repository."""
-        branch, is_git, root = get_git_info(str(temp_git_repo))
-        assert is_git is True
-        # Resolve both paths to handle macOS /var -> /private/var symlink
-        assert Path(root).resolve() == temp_git_repo.resolve()
-        # Branch should be main or master (depends on git config)
-        assert branch in ["main", "master"]
-
-    def test_non_git_directory(self, temp_dir: Path):
-        """Test non-git directory returns appropriate values."""
-        branch, is_git, root = get_git_info(str(temp_dir))
-        assert is_git is False
-        assert branch is None
-        assert root is None
-
-    def test_get_current_branch_git(self, temp_git_repo: Path):
-        """Test get_current_branch in a git repo."""
-        branch = get_current_branch(str(temp_git_repo))
-        assert branch in ["main", "master"]
-
-    def test_get_current_branch_non_git(self, temp_dir: Path):
-        """Test get_current_branch in a non-git directory."""
-        branch = get_current_branch(str(temp_dir))
-        assert branch == "unknown"
-
-
-class TestChromaDB:
-    """Tests for ChromaDB functionality."""
-
-    def test_create_collection(self, temp_chroma_client):
-        """Test collection creation."""
-        collection = get_or_create_collection(temp_chroma_client, "test_collection")
-        assert collection is not None
-        assert collection.name == "test_collection"
-
-    def test_collection_stats_empty(self, temp_chroma_client):
-        """Test stats for empty collection."""
-        collection = get_or_create_collection(temp_chroma_client, "test_empty")
-        stats = get_collection_stats(collection)
-        assert stats["document_count"] == 0
-
-    def test_collection_stats_with_docs(self, temp_chroma_client):
-        """Test stats for collection with documents."""
-        collection = get_or_create_collection(temp_chroma_client, "test_with_docs")
-        collection.add(
-            documents=["doc1", "doc2", "doc3"],
-            ids=["1", "2", "3"],
-            metadatas=[{"type": "test"}] * 3,
-        )
-        stats = get_collection_stats(collection)
-        assert stats["document_count"] == 3
+from src.storage import get_or_create_collection
 
 
 class TestBM25Index:

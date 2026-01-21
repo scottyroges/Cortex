@@ -115,11 +115,17 @@ class TestMigrationRunner:
 
     def test_run_migrations_from_zero(self, temp_data_dir):
         """Test running migrations from version 0."""
+        from unittest.mock import MagicMock
         from src.storage.migrations.runner import run_migrations, SCHEMA_VERSION
 
         db_path = str(Path(temp_data_dir) / "db")
 
-        with patch("src.storage.migrations.runner.DB_PATH", db_path):
+        # Mock get_collection for migrations that need it
+        mock_collection = MagicMock()
+        mock_collection.get.return_value = {"ids": [], "documents": [], "metadatas": [], "embeddings": []}
+
+        with patch("src.storage.migrations.runner.DB_PATH", db_path), \
+             patch("src.configs.services.get_collection", return_value=mock_collection):
             result = run_migrations(from_version=0)
 
             assert result["status"] == "complete"

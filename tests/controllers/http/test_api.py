@@ -1122,3 +1122,214 @@ class TestBrowsePurgeEndpoint:
         data = response.json()
         assert len(data["sample_ids"]) == 3
         assert "doc1" in data["sample_ids"]
+
+
+class TestMigrationsEndpoint:
+    """Tests for GET /migrations/status endpoint."""
+
+    def test_migrations_status(self, api_client):
+        """Test migrations status returns version info."""
+        with patch("src.storage.migrations.get_current_schema_version", return_value=5), \
+             patch("src.storage.migrations.needs_migration", return_value=False):
+
+            response = api_client.get("/migrations/status")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert "current_version" in data
+            assert "target_version" in data
+            assert "needs_migration" in data
+
+    def test_migrations_status_needs_update(self, api_client):
+        """Test migrations status when update is needed."""
+        with patch("src.storage.migrations.get_current_schema_version", return_value=3), \
+             patch("src.storage.migrations.needs_migration", return_value=True):
+
+            response = api_client.get("/migrations/status")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["needs_migration"] is True
+
+
+class TestBackupEndpoints:
+    """Tests for backup admin endpoints."""
+
+    def test_create_backup(self, api_client, temp_dir):
+        """Test creating a backup."""
+        backup_path = str(temp_dir / "backup.tar.gz")
+
+        with patch("src.storage.migrations.backup_database", return_value=backup_path):
+            response = api_client.post("/admin/backup", params={"label": "test-backup"})
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["status"] == "success"
+            assert data["backup_path"] == backup_path
+
+    def test_create_backup_error(self, api_client):
+        """Test backup creation error handling."""
+        with patch("src.storage.migrations.backup_database", side_effect=Exception("Disk full")):
+            response = api_client.post("/admin/backup")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["status"] == "error"
+            assert "Disk full" in data["error"]
+
+    def test_list_backups(self, api_client):
+        """Test listing backups."""
+        mock_backups = [
+            {"path": "/backup1.tar.gz", "created": "2024-01-01T00:00:00Z"},
+            {"path": "/backup2.tar.gz", "created": "2024-01-02T00:00:00Z"},
+        ]
+
+        with patch("src.storage.migrations.list_backups", return_value=mock_backups):
+            response = api_client.get("/admin/backups")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert "backups" in data
+            assert len(data["backups"]) == 2
+
+
+class TestIngestStatusEndpoints:
+    """Tests for ingestion status endpoints."""
+
+    def test_list_ingest_tasks(self, api_client):
+        """Test listing ingestion tasks."""
+        from unittest.mock import MagicMock
+        from dataclasses import dataclass
+
+        @dataclass
+        class MockTask:
+            task_id: str
+            repository: str
+            status: str
+            force_full: bool
+            files_processed: int
+            files_total: int
+            created_at: str
+            completed_at: str = None
+
+        mock_worker = MagicMock()
+        mock_worker._store.get_all_tasks.return_value = [
+            MockTask(
+                task_id="task-1",
+                repository="test-repo",
+                status="completed",
+                force_full=False,
+                files_processed=10,
+                files_total=10,
+                created_at="2024-01-01T00:00:00Z",
+                completed_at="2024-01-01T00:01:00Z",
+            )
+        ]
+
+        with patch("src.tools.ingest.async_processor.get_worker", return_value=mock_worker):
+            response = api_client.get("/ingest-status")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert "tasks" in data
+            assert len(data["tasks"]) == 1
+            assert data["tasks"][0]["task_id"] == "task-1"
+            assert data["tasks"][0]["progress"]["percent"] == 100.0
+
+    def test_list_ingest_tasks_with_repository_filter(self, api_client):
+        """Test listing ingestion tasks filtered by repository."""
+        from unittest.mock import MagicMock
+
+        mock_worker = MagicMock()
+        mock_worker._store.get_all_tasks.return_value = []
+
+        with patch("src.tools.ingest.async_processor.get_worker", return_value=mock_worker):
+            response = api_client.get("/ingest-status", params={"repository": "filtered-repo"})
+
+            assert response.status_code == 200
+            mock_worker._store.get_all_tasks.assert_called_once_with(repository="filtered-repo")
+
+    def test_get_ingest_task_status(self, api_client):
+        """Test getting specific task status."""
+        mock_worker = MagicMock()
+        mock_worker.get_status.return_value = {
+            "task_id": "task-123",
+            "status": "running",
+            "progress": {"files_processed": 5, "files_total": 10},
+        }
+
+        with patch("src.tools.ingest.async_processor.get_worker", return_value=mock_worker):
+            response = api_client.get("/ingest-status/task-123")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["task_id"] == "task-123"
+            assert data["status"] == "running"
+
+    def test_get_ingest_task_not_found(self, api_client):
+        """Test getting non-existent task status."""
+        mock_worker = MagicMock()
+        mock_worker.get_status.return_value = None
+
+        with patch("src.tools.ingest.async_processor.get_worker", return_value=mock_worker):
+            response = api_client.get("/ingest-status/nonexistent")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["status"] == "not_found"
+
+
+class TestAutocaptureStatusEndpoint:
+    """Tests for GET /autocapture/status endpoint."""
+
+    def test_autocapture_status_not_installed(self, api_client, temp_dir):
+        """Test autocapture status when hook is not installed."""
+        # Patch at the import location in the autocapture module
+        with patch("src.controllers.http.api.autocapture.get_data_path", return_value=temp_dir):
+            response = api_client.get("/autocapture/status")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["hook_script_installed"] is False
+            assert data["captured_sessions_count"] == 0
+            assert data["queued_sessions_count"] == 0
+
+    def test_autocapture_status_with_queue(self, api_client, temp_dir):
+        """Test autocapture status with queued sessions."""
+        # Create queue file with sessions
+        queue_file = temp_dir / "capture_queue.json"
+        queue_file.write_text('[{"session_id": "1"}, {"session_id": "2"}]')
+
+        with patch("src.controllers.http.api.autocapture.get_data_path", return_value=temp_dir):
+            response = api_client.get("/autocapture/status")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["queued_sessions_count"] == 2
+
+    def test_autocapture_status_with_captures(self, api_client, temp_dir):
+        """Test autocapture status with captured sessions."""
+        # Create captured sessions file
+        captured_file = temp_dir / "captured_sessions.json"
+        captured_file.write_text('{"captured": ["s1", "s2", "s3"]}')
+
+        with patch("src.controllers.http.api.autocapture.get_data_path", return_value=temp_dir):
+            response = api_client.get("/autocapture/status")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["captured_sessions_count"] == 3
+
+
+class TestProcessQueueEndpoint:
+    """Tests for POST /process-queue endpoint."""
+
+    def test_process_queue_triggers(self, api_client):
+        """Test process queue triggers processing."""
+        with patch("src.tools.autocapture.trigger_processing") as mock_trigger:
+            response = api_client.post("/process-queue")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["status"] == "triggered"
+            mock_trigger.assert_called_once()

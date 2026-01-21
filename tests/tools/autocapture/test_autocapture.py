@@ -1272,3 +1272,246 @@ class TestProcessSyncEndpoint:
 
         assert result["status"] == "error"
         assert "Summarization failed" in result["error"]
+
+
+# =============================================================================
+# SessionProcessor Tests
+# =============================================================================
+
+
+class TestSessionProcessor:
+    """Tests for session_processor module."""
+
+    def test_processing_result_dataclass(self):
+        """ProcessingResult dataclass works correctly."""
+        from src.tools.autocapture.session_processor import ProcessingResult
+
+        result = ProcessingResult(
+            success=True,
+            summary="Test summary",
+            session_id="test-123",
+        )
+        assert result.success is True
+        assert result.summary == "Test summary"
+        assert result.error is None
+
+    def test_processing_result_error(self):
+        """ProcessingResult can represent errors."""
+        from src.tools.autocapture.session_processor import ProcessingResult
+
+        result = ProcessingResult(
+            success=False,
+            error="Something went wrong",
+            session_id="test-123",
+        )
+        assert result.success is False
+        assert result.error == "Something went wrong"
+        assert result.summary is None
+
+    def test_process_session_empty_transcript(self):
+        """process_session returns success with error for empty transcript."""
+        from src.tools.autocapture.session_processor import process_session
+
+        result = process_session(
+            session_id="test-1",
+            transcript_text="",
+            files_edited=[],
+            repository="test-repo",
+        )
+
+        assert result.success is True  # Empty is "processed"
+        assert result.error == "empty_transcript"
+        assert result.summary is None
+
+    def test_process_session_whitespace_only(self):
+        """process_session treats whitespace-only as empty."""
+        from src.tools.autocapture.session_processor import process_session
+
+        result = process_session(
+            session_id="test-1",
+            transcript_text="   \n\t  ",
+            files_edited=[],
+            repository="test-repo",
+        )
+
+        assert result.success is True
+        assert result.error == "empty_transcript"
+
+    @patch("src.configs.yaml_config.load_yaml_config")
+    @patch("src.external.llm.get_provider")
+    def test_process_session_no_provider_returns_none(
+        self, mock_get_provider, mock_load_config
+    ):
+        """process_session fails when get_provider returns None."""
+        from src.tools.autocapture.session_processor import process_session
+
+        mock_load_config.return_value = {}
+        mock_get_provider.return_value = None  # No provider available
+
+        result = process_session(
+            session_id="test-1",
+            transcript_text="User: Hello",
+            files_edited=[],
+            repository="test-repo",
+        )
+
+        assert result.success is False
+        assert "No LLM provider" in result.error
+
+    @patch("src.configs.yaml_config.load_yaml_config")
+    @patch("src.external.llm.get_provider")
+    def test_process_session_provider_exception(
+        self, mock_get_provider, mock_load_config
+    ):
+        """process_session handles provider initialization errors."""
+        from src.tools.autocapture.session_processor import process_session
+
+        mock_load_config.return_value = {}
+        mock_get_provider.side_effect = Exception("Provider init failed")
+
+        result = process_session(
+            session_id="test-1",
+            transcript_text="User: Hello",
+            files_edited=[],
+            repository="test-repo",
+        )
+
+        assert result.success is False
+        assert "No LLM provider" in result.error
+
+    @patch("src.tools.memory.conclude_session")
+    @patch("src.external.llm.get_provider")
+    @patch("src.configs.yaml_config.load_yaml_config")
+    def test_process_session_summarization_fails(
+        self, mock_load_config, mock_get_provider, mock_conclude
+    ):
+        """process_session fails when summarization returns empty."""
+        from src.tools.autocapture.session_processor import process_session
+
+        mock_load_config.return_value = {}
+        mock_provider = MagicMock()
+        mock_provider.summarize_session.return_value = ""  # Empty summary
+        mock_get_provider.return_value = mock_provider
+
+        result = process_session(
+            session_id="test-1",
+            transcript_text="User: Hello",
+            files_edited=[],
+            repository="test-repo",
+        )
+
+        assert result.success is False
+        assert "empty result" in result.error
+
+    @patch("src.tools.memory.conclude_session")
+    @patch("src.external.llm.get_provider")
+    @patch("src.configs.yaml_config.load_yaml_config")
+    def test_process_session_summarization_exception(
+        self, mock_load_config, mock_get_provider, mock_conclude
+    ):
+        """process_session handles summarization exceptions."""
+        from src.tools.autocapture.session_processor import process_session
+
+        mock_load_config.return_value = {}
+        mock_provider = MagicMock()
+        mock_provider.summarize_session.side_effect = Exception("LLM API error")
+        mock_get_provider.return_value = mock_provider
+
+        result = process_session(
+            session_id="test-1",
+            transcript_text="User: Hello",
+            files_edited=[],
+            repository="test-repo",
+        )
+
+        assert result.success is False
+        assert "Summarization failed" in result.error
+
+    @patch("src.tools.memory.conclude_session")
+    @patch("src.external.llm.get_provider")
+    @patch("src.configs.yaml_config.load_yaml_config")
+    def test_process_session_conclude_fails(
+        self, mock_load_config, mock_get_provider, mock_conclude
+    ):
+        """process_session handles conclude_session failures."""
+        from src.tools.autocapture.session_processor import process_session
+
+        mock_load_config.return_value = {}
+        mock_provider = MagicMock()
+        mock_provider.summarize_session.return_value = "Good summary"
+        mock_get_provider.return_value = mock_provider
+        mock_conclude.side_effect = Exception("Storage error")
+
+        result = process_session(
+            session_id="test-1",
+            transcript_text="User: Hello",
+            files_edited=[],
+            repository="test-repo",
+        )
+
+        assert result.success is False
+        assert "Save failed" in result.error
+
+    @patch("src.tools.memory.conclude_session")
+    @patch("src.external.llm.get_provider")
+    @patch("src.configs.yaml_config.load_yaml_config")
+    def test_process_session_success(
+        self, mock_load_config, mock_get_provider, mock_conclude
+    ):
+        """process_session succeeds with valid inputs."""
+        from src.tools.autocapture.session_processor import process_session
+
+        mock_load_config.return_value = {}
+        mock_provider = MagicMock()
+        mock_provider.summarize_session.return_value = "Session summary"
+        mock_get_provider.return_value = mock_provider
+        mock_conclude.return_value = "{}"
+
+        result = process_session(
+            session_id="test-1",
+            transcript_text="User: Hello\nAssistant: Hi there",
+            files_edited=["/a.py"],
+            repository="test-repo",
+            initiative_id="initiative:123",
+        )
+
+        assert result.success is True
+        assert result.summary == "Session summary"
+        assert result.session_id == "test-1"
+        mock_conclude.assert_called_once_with(
+            summary="Session summary",
+            changed_files=["/a.py"],
+            repository="test-repo",
+            initiative="initiative:123",
+        )
+
+    @patch("src.tools.memory.conclude_session")
+    @patch("src.external.llm.get_provider")
+    @patch("src.configs.yaml_config.load_yaml_config")
+    def test_process_session_truncates_long_transcript(
+        self, mock_load_config, mock_get_provider, mock_conclude
+    ):
+        """process_session truncates transcripts exceeding max_transcript_chars."""
+        from src.tools.autocapture.session_processor import process_session
+
+        mock_load_config.return_value = {}
+        mock_provider = MagicMock()
+        mock_provider.summarize_session.return_value = "Summary"
+        mock_get_provider.return_value = mock_provider
+        mock_conclude.return_value = "{}"
+
+        # Create a very long transcript
+        long_transcript = "A" * 200000  # 200k chars
+
+        result = process_session(
+            session_id="test-1",
+            transcript_text=long_transcript,
+            files_edited=[],
+            repository="test-repo",
+            max_transcript_chars=1000,  # Limit to 1000
+        )
+
+        assert result.success is True
+        # Verify the truncated transcript was passed to summarize_session
+        call_args = mock_provider.summarize_session.call_args[0][0]
+        assert len(call_args) == 1000
