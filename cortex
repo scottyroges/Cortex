@@ -20,14 +20,25 @@
 # Environment variables (override config.yaml):
 #   CORTEX_CODE_PATHS    - Comma-separated list of code directories to mount
 #   CORTEX_DEBUG         - Enable debug logging (true/false)
-#   CORTEX_DAEMON_PORT   - Daemon port (default: 8000)
+#   CORTEX_PORT          - Server port (default: 8000)
 #   ANTHROPIC_API_KEY    - Required for LLM provider="anthropic"
 #
 
+# --- Error Handling ---
+set -euo pipefail
+
+# Cleanup function for trap handler
+_cleanup() {
+    # Only clean up summarizer PID if we started it
+    if [ -n "${_STARTED_SUMMARIZER:-}" ]; then
+        rm -f "$HOME/.cortex/summarizer.pid" 2>/dev/null || true
+    fi
+}
+trap _cleanup EXIT
+
 # --- Configuration ---
 DAEMON_CONTAINER_NAME="cortex-daemon"
-DAEMON_PORT="${CORTEX_DAEMON_PORT:-8000}"
-HTTP_PORT="${CORTEX_HTTP_PORT:-8080}"
+CORTEX_PORT="${CORTEX_PORT:-8000}"
 SUMMARIZER_PORT="${CORTEX_SUMMARIZER_PORT:-8081}"
 IMAGE_NAME="cortex"
 
@@ -44,11 +55,17 @@ DATA_PATH="${DATA_PATH/#\~/$HOME}"
 # --- Find the Cortex source directory ---
 get_script_dir() {
     local source="${BASH_SOURCE[0]}"
-    while [ -L "$source" ]; do
+    local iterations=0
+    while [ -L "$source" ] && [ $iterations -lt 50 ]; do
         local dir="$(cd -P "$(dirname "$source")" && pwd)"
         source="$(readlink "$source")"
         [[ $source != /* ]] && source="$dir/$source"
+        iterations=$((iterations + 1))
     done
+    if [ $iterations -ge 50 ]; then
+        echo "Error: Symlink loop detected" >&2
+        exit 1
+    fi
     cd -P "$(dirname "$source")" && pwd
 }
 
@@ -60,83 +77,31 @@ CONFIG_FILE="$DATA_PATH/config.yaml"
 # Config values (loaded from file, can be overridden by env vars)
 CONFIG_CODE_PATHS=""
 CONFIG_DEBUG=""
-CONFIG_HTTP_PORT=""
-CONFIG_DAEMON_PORT=""
+CONFIG_PORT=""
 CONFIG_LLM_PROVIDER=""
 
 # Track env var overrides (for display purposes)
 ENV_OVERRIDE_CODE_PATHS=""
 ENV_OVERRIDE_DEBUG=""
-ENV_OVERRIDE_HTTP_PORT=""
-ENV_OVERRIDE_DAEMON_PORT=""
+ENV_OVERRIDE_PORT=""
 
 load_config() {
     # Capture original env vars before loading config
     local orig_code_paths="$CODE_PATHS"
-    local orig_debug="$CORTEX_DEBUG"
-    local orig_http_port="$CORTEX_HTTP_PORT"
-    local orig_daemon_port="$CORTEX_DAEMON_PORT"
+    local orig_debug="${CORTEX_DEBUG:-}"
+    local orig_port="${CORTEX_PORT:-}"
 
     # Load config from ~/.cortex/config.yaml if it exists
     if [ -f "$CONFIG_FILE" ]; then
-        # Parse YAML using python3 (available on most systems)
+        # Use config parser script for safer YAML parsing
         local config
-        config=$(python3 -c "
-import sys
-try:
-    import yaml
-    with open('$CONFIG_FILE') as f:
-        c = yaml.safe_load(f) or {}
-except ImportError:
-    # Fallback: simple YAML parsing without PyYAML
-    c = {}
-    with open('$CONFIG_FILE') as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith('#'):
-                continue
-            if ':' in line and not line.startswith(' ') and not line.startswith('-'):
-                key, val = line.split(':', 1)
-                key = key.strip()
-                val = val.strip()
-                if val and not val.startswith('#'):
-                    # Remove quotes
-                    if (val.startswith('\"') and val.endswith('\"')) or (val.startswith(\"'\") and val.endswith(\"'\")):
-                        val = val[1:-1]
-                    # Boolean
-                    if val.lower() == 'true':
-                        val = True
-                    elif val.lower() == 'false':
-                        val = False
-                    # Number
-                    else:
-                        try:
-                            val = int(val)
-                        except ValueError:
-                            pass
-                    c[key] = val
-
-# Output as shell-friendly format
-paths = c.get('code_paths', [])
-if isinstance(paths, list):
-    print('CODE_PATHS=' + ','.join(str(p) for p in paths))
-print('DEBUG=' + str(c.get('debug', '')).lower())
-print('HTTP_PORT=' + str(c.get('http_port', '')))
-print('DAEMON_PORT=' + str(c.get('daemon_port', '')))
-# Extract nested llm.primary_provider
-llm = c.get('llm', {})
-if isinstance(llm, dict):
-    print('LLM_PROVIDER=' + str(llm.get('primary_provider', '')))
-" 2>/dev/null)
-
-        if [ $? -eq 0 ]; then
+        if config=$(python3 "$CORTEX_SRC_DIR/scripts/config_parser.py" parse "$CONFIG_FILE" 2>/dev/null); then
             # Parse the output
             while IFS='=' read -r key value; do
                 case "$key" in
                     CODE_PATHS) CONFIG_CODE_PATHS="$value" ;;
                     DEBUG) CONFIG_DEBUG="$value" ;;
-                    HTTP_PORT) CONFIG_HTTP_PORT="$value" ;;
-                    DAEMON_PORT) CONFIG_DAEMON_PORT="$value" ;;
+                    PORT) CONFIG_PORT="$value" ;;
                     LLM_PROVIDER) CONFIG_LLM_PROVIDER="$value" ;;
                 esac
             done <<< "$config"
@@ -150,24 +115,17 @@ if isinstance(llm, dict):
         ENV_OVERRIDE_CODE_PATHS="true"
     fi
 
-    if [ -z "$CORTEX_DEBUG" ] && [ -n "$CONFIG_DEBUG" ]; then
+    if [ -z "${CORTEX_DEBUG:-}" ] && [ -n "$CONFIG_DEBUG" ]; then
         CORTEX_DEBUG="$CONFIG_DEBUG"
     elif [ -n "$orig_debug" ] && [ -n "$CONFIG_DEBUG" ]; then
         ENV_OVERRIDE_DEBUG="true"
     fi
 
-    # Apply http_port config
-    if [ -z "$CORTEX_HTTP_PORT" ] && [ -n "$CONFIG_HTTP_PORT" ]; then
-        HTTP_PORT="$CONFIG_HTTP_PORT"
-    elif [ -n "$orig_http_port" ] && [ -n "$CONFIG_HTTP_PORT" ]; then
-        ENV_OVERRIDE_HTTP_PORT="true"
-    fi
-
-    # Apply daemon_port config
-    if [ -z "$CORTEX_DAEMON_PORT" ] && [ -n "$CONFIG_DAEMON_PORT" ]; then
-        DAEMON_PORT="$CONFIG_DAEMON_PORT"
-    elif [ -n "$orig_daemon_port" ] && [ -n "$CONFIG_DAEMON_PORT" ]; then
-        ENV_OVERRIDE_DAEMON_PORT="true"
+    # Apply port config
+    if [ -z "${CORTEX_PORT:-}" ] && [ -n "$CONFIG_PORT" ]; then
+        CORTEX_PORT="$CONFIG_PORT"
+    elif [ -n "$orig_port" ] && [ -n "$CONFIG_PORT" ]; then
+        ENV_OVERRIDE_PORT="true"
     fi
 }
 
@@ -223,7 +181,7 @@ wait_for_daemon() {
     log_info "Waiting for daemon to be ready..."
 
     while [ $attempt -lt $max_attempts ]; do
-        if curl -sf "http://localhost:${DAEMON_PORT}/health" >/dev/null 2>&1; then
+        if curl -sf "http://localhost:${CORTEX_PORT}/health" >/dev/null 2>&1; then
             log_info "Daemon is ready"
             return 0
         fi
@@ -277,9 +235,18 @@ build_docker_env() {
     # Pass the LLM provider setting to the daemon
     DOCKER_ENVS+=("-e" "CORTEX_LLM_PROVIDER=$llm_provider")
 
-    # Pass summarizer URL if using claude-cli (host.docker.internal for Mac/Windows)
+    # Pass summarizer URL if using claude-cli
     if [ "$llm_provider" = "claude-cli" ]; then
-        DOCKER_ENVS+=("-e" "CORTEX_SUMMARIZER_URL=http://host.docker.internal:$SUMMARIZER_PORT")
+        # Platform detection for Docker host access
+        local docker_host
+        if [[ "$(uname)" == "Linux" ]] && ! grep -q "microsoft" /proc/version 2>/dev/null; then
+            # Native Linux - use docker bridge gateway IP
+            docker_host="172.17.0.1"
+        else
+            # macOS, Windows, or WSL - use host.docker.internal
+            docker_host="host.docker.internal"
+        fi
+        DOCKER_ENVS+=("-e" "CORTEX_SUMMARIZER_URL=http://${docker_host}:$SUMMARIZER_PORT")
     fi
 }
 
@@ -327,18 +294,27 @@ start_summarizer() {
         > "$DATA_PATH/summarizer.log" 2>&1 &
     local pid=$!
     cd - >/dev/null
-    echo "$pid" > "$SUMMARIZER_PID_FILE"
 
-    # Wait briefly and check if it started
-    sleep 1
-    if is_summarizer_running; then
-        log_info "Summarizer started (PID: $pid)"
-        return 0
+    # Wait for health check before writing PID (prevents stale PID files)
+    local attempts=0
+    while [ $attempts -lt 20 ]; do
+        if curl -sf "http://localhost:$SUMMARIZER_PORT/health" >/dev/null 2>&1; then
+            echo "$pid" > "$SUMMARIZER_PID_FILE"
+            _STARTED_SUMMARIZER="true"  # Mark for cleanup trap
+            log_info "Summarizer started (PID: $pid)"
+            return 0
+        fi
+        sleep 0.5
+        attempts=$((attempts + 1))
+    done
+
+    # Process may have died - check if still running
+    if kill -0 "$pid" 2>/dev/null; then
+        log_error "Summarizer started but health check failed"
     else
-        log_error "Summarizer failed to start"
-        rm -f "$SUMMARIZER_PID_FILE"
-        return 1
+        log_error "Summarizer failed to start - check $DATA_PATH/summarizer.log"
     fi
+    return 1
 }
 
 stop_summarizer() {
@@ -369,15 +345,14 @@ start_daemon() {
     docker run -d \
         --name "$DAEMON_CONTAINER_NAME" \
         --restart unless-stopped \
-        -p "${DAEMON_PORT}:8080" \
-        -p "${HTTP_PORT}:8080" \
+        -p "${CORTEX_PORT}:8080" \
         "${DOCKER_VOLUMES[@]}" \
         -e "CORTEX_HTTP_PORT=8080" \
         "${DOCKER_ENVS[@]}" \
         "$IMAGE_NAME" daemon >&2
 
     if wait_for_daemon; then
-        log_info "Daemon started on port $DAEMON_PORT"
+        log_info "Daemon started on port $CORTEX_PORT"
 
         # Start summarizer if using claude-cli
         start_summarizer
@@ -410,7 +385,7 @@ daemon_status() {
         docker ps --filter "name=^${DAEMON_CONTAINER_NAME}$" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
         echo ""
         echo "Build info:"
-        curl -s "http://localhost:${DAEMON_PORT}/info" 2>/dev/null || echo "Failed to reach daemon"
+        curl -s "http://localhost:${CORTEX_PORT}/info" 2>/dev/null || echo "Failed to reach daemon"
         echo ""
         echo ""
         echo "Local HEAD: $(git -C "$CORTEX_SRC_DIR" rev-parse --short HEAD 2>/dev/null || echo 'unknown')"
@@ -488,28 +463,16 @@ init_config() {
         debug="true"
     fi
 
-    # Daemon port
+    # Port
     echo ""
-    echo "Daemon port (for MCP communication):"
-    read -r -p "Daemon port [8000]: " daemon_port_input
-    local daemon_port="${daemon_port_input:-8000}"
+    echo "Server port (for MCP and HTTP API):"
+    read -r -p "Port [8000]: " port_input
+    local port="${port_input:-8000}"
 
-    # Validate port is a number
-    if ! [[ "$daemon_port" =~ ^[0-9]+$ ]]; then
+    # Validate port is a number and in valid range
+    if ! [[ "$port" =~ ^[0-9]+$ ]] || [ "$port" -lt 1 ] || [ "$port" -gt 65535 ]; then
         echo "Invalid port, using 8000"
-        daemon_port="8000"
-    fi
-
-    # HTTP port
-    echo ""
-    echo "HTTP debug server port (for CLI search and web clipper):"
-    read -r -p "HTTP port [8080]: " http_port_input
-    local http_port="${http_port_input:-8080}"
-
-    # Validate port is a number
-    if ! [[ "$http_port" =~ ^[0-9]+$ ]]; then
-        echo "Invalid port, using 8080"
-        http_port="8080"
+        port="8000"
     fi
 
     # Build code_paths YAML
@@ -535,11 +498,8 @@ for p in paths:
 code_paths:
 $paths_yaml
 
-# Daemon port for MCP communication
-daemon_port: $daemon_port
-
-# HTTP debug server port (for CLI search, web browser, and auto-capture)
-http_port: $http_port
+# Server port (for MCP and HTTP API)
+port: $port
 
 # Enable debug logging
 debug: $debug
@@ -625,8 +585,7 @@ show_config() {
     echo "Active configuration (after env var overrides):"
     echo "  code_paths: ${CODE_PATHS:-<not set>}"
     echo "  debug: ${CORTEX_DEBUG:-<not set>}"
-    echo "  daemon_port: $DAEMON_PORT"
-    echo "  http_port: $HTTP_PORT"
+    echo "  port: $CORTEX_PORT"
     echo ""
 
     # Show any env var overrides
@@ -636,11 +595,8 @@ show_config() {
     if [ -n "$ENV_OVERRIDE_DEBUG" ]; then
         echo "Note: CORTEX_DEBUG env var is overriding config.yaml"
     fi
-    if [ -n "$ENV_OVERRIDE_DAEMON_PORT" ]; then
-        echo "Note: CORTEX_DAEMON_PORT env var is overriding config.yaml"
-    fi
-    if [ -n "$ENV_OVERRIDE_HTTP_PORT" ]; then
-        echo "Note: CORTEX_HTTP_PORT env var is overriding config.yaml"
+    if [ -n "$ENV_OVERRIDE_PORT" ]; then
+        echo "Note: CORTEX_PORT env var is overriding config.yaml"
     fi
 }
 
@@ -648,13 +604,8 @@ edit_config() {
     if [ ! -f "$CONFIG_FILE" ]; then
         echo "No config file found. Creating default..."
         mkdir -p "$DATA_PATH"
-        # Use Python to create the default config
-        python3 -c "
-import sys
-sys.path.insert(0, '$CORTEX_SRC_DIR')
-from src.configs.yaml_config import create_default_config
-create_default_config()
-"
+        # Use config parser script to create default config
+        python3 "$CORTEX_SRC_DIR/scripts/config_parser.py" create-default "$CONFIG_FILE"
     fi
 
     local editor="${EDITOR:-${VISUAL:-vi}}"
@@ -688,7 +639,7 @@ run_bridge() {
     # Run bridge in foreground, connecting to daemon
     exec docker run -i --rm \
         --network host \
-        -e "CORTEX_DAEMON_URL=http://localhost:${DAEMON_PORT}" \
+        -e "CORTEX_DAEMON_URL=http://localhost:${CORTEX_PORT}" \
         "${DOCKER_ENVS[@]}" \
         "$IMAGE_NAME" bridge
 }
@@ -705,7 +656,7 @@ do_update() {
     local current_commit
     local local_commit
 
-    current_commit=$(curl -sf "http://localhost:${DAEMON_PORT}/info" 2>/dev/null | python3 -c "
+    current_commit=$(curl -sf "http://localhost:${CORTEX_PORT}/info" 2>/dev/null | python3 -c "
 import json, sys
 data = json.load(sys.stdin)
 print(data.get('git_commit', 'unknown')[:7])
@@ -726,7 +677,7 @@ print(data.get('git_commit', 'unknown')[:7])
     echo "Creating backup..."
     if is_daemon_running; then
         local backup_result
-        backup_result=$(curl -sf -X POST "http://localhost:${DAEMON_PORT}/admin/backup" 2>/dev/null)
+        backup_result=$(curl -sf -X POST "http://localhost:${CORTEX_PORT}/admin/backup" 2>/dev/null)
         if [ $? -eq 0 ]; then
             local backup_path
             backup_path=$(echo "$backup_result" | python3 -c "import json,sys; print(json.load(sys.stdin).get('backup_path',''))" 2>/dev/null)
@@ -782,7 +733,7 @@ print(data.get('git_commit', 'unknown')[:7])
     # Step 7: Verify
     if is_daemon_running; then
         local new_commit
-        new_commit=$(curl -sf "http://localhost:${DAEMON_PORT}/info" 2>/dev/null | python3 -c "
+        new_commit=$(curl -sf "http://localhost:${CORTEX_PORT}/info" 2>/dev/null | python3 -c "
 import json, sys
 data = json.load(sys.stdin)
 print(data.get('git_commit', 'unknown')[:7])
@@ -793,7 +744,7 @@ print(data.get('git_commit', 'unknown')[:7])
 
         # Check migration status
         local migration_status
-        migration_status=$(curl -sf "http://localhost:${DAEMON_PORT}/migrations/status" 2>/dev/null)
+        migration_status=$(curl -sf "http://localhost:${CORTEX_PORT}/migrations/status" 2>/dev/null)
         if [ $? -eq 0 ]; then
             echo "$migration_status" | python3 -c "
 import json, sys
@@ -821,36 +772,15 @@ print(f'  Schema version: v{version}')
 # --- Hooks Command ---
 
 hooks_install() {
-    local force=""
+    local force_flag=""
     if [ "${1:-}" = "--force" ] || [ "${1:-}" = "-f" ]; then
-        force="force=True"
+        force_flag="--force"
     fi
 
     echo "Installing Cortex hooks..."
     echo ""
 
-    python3 -c "
-import sys
-sys.path.insert(0, '$CORTEX_SRC_DIR')
-from pathlib import Path
-try:
-    from src.integrations.hooks import install_hooks
-    success, messages = install_hooks(
-        claude_code=True,
-        source_dir=Path('$CORTEX_SRC_DIR'),
-        $force
-    )
-    for msg in messages:
-        print(f'  {msg}')
-    sys.exit(0 if success else 1)
-except ImportError as e:
-    print(f'Error: Could not load install module: {e}')
-    print('Make sure you are running from the Cortex source directory.')
-    sys.exit(1)
-except Exception as e:
-    print(f'Error: {e}')
-    sys.exit(1)
-"
+    python3 "$CORTEX_SRC_DIR/scripts/hooks_manager.py" --source-dir "$CORTEX_SRC_DIR" install $force_flag
     local result=$?
 
     echo ""
@@ -871,102 +801,14 @@ hooks_status() {
     echo "=================="
     echo ""
 
-    python3 -c "
-import sys
-sys.path.insert(0, '$CORTEX_SRC_DIR')
-try:
-    from src.integrations.hooks import get_hook_status
-
-    status = get_hook_status()
-    details = status.details.get('claude_code', {})
-
-    # Claude Code status
-    print('Claude Code:')
-    if status.claude_code_available:
-        print('  CLI: installed')
-    else:
-        print('  CLI: not found')
-
-    # SessionEnd hook
-    print('')
-    print('  SessionEnd (auto-capture):')
-    if status.hook_script_exists:
-        script_path = details.get('hook_script_path', '~/.cortex/hooks/claude_session_end.py')
-        print(f'    Script: {script_path}')
-    else:
-        print('    Script: not installed')
-
-    if status.claude_code_installed:
-        needs_migration = details.get('needs_migration', False)
-        if needs_migration:
-            print('    Registered: yes (OLD FORMAT - needs migration)')
-        else:
-            print('    Registered: yes')
-    else:
-        print('    Registered: no')
-
-    print('')
-
-    # Overall status
-    needs_migration = details.get('needs_migration', False)
-
-    if needs_migration:
-        print('Status: Hooks ENABLED but using deprecated format')
-        print('')
-        print('Run \\'cortex hooks repair\\' to migrate to the new format.')
-    elif status.any_installed:
-        print('Status: Hooks ENABLED (SessionEnd)')
-    elif status.claude_code_available:
-        print('Status: Hooks NOT enabled')
-        print('')
-        print('Run \\'cortex hooks install\\' to enable hooks.')
-    else:
-        print('Status: Claude Code CLI not found')
-        print('')
-        print('Install Claude Code first, then run \\'cortex hooks install\\'.')
-
-    if status.errors:
-        print('')
-        print('Errors:')
-        for err in status.errors:
-            print(f'  - {err}')
-
-except ImportError as e:
-    print(f'Error: Could not load install module: {e}')
-    sys.exit(1)
-except Exception as e:
-    print(f'Error: {e}')
-    sys.exit(1)
-"
+    python3 "$CORTEX_SRC_DIR/scripts/hooks_manager.py" --source-dir "$CORTEX_SRC_DIR" status
 }
 
 hooks_repair() {
     echo "Repairing Cortex hooks..."
     echo ""
 
-    python3 -c "
-import sys
-sys.path.insert(0, '$CORTEX_SRC_DIR')
-from pathlib import Path
-try:
-    from src.integrations.hooks import repair_hooks, copy_hook_scripts
-
-    # First, refresh hook scripts from source
-    success, msg = copy_hook_scripts(Path('$CORTEX_SRC_DIR'))
-    print(f'Script refresh: {msg}')
-
-    # Then reinstall/re-register
-    success, messages = repair_hooks()
-    for msg in messages:
-        print(f'  {msg}')
-    sys.exit(0 if success else 1)
-except ImportError as e:
-    print(f'Error: Could not load install module: {e}')
-    sys.exit(1)
-except Exception as e:
-    print(f'Error: {e}')
-    sys.exit(1)
-"
+    python3 "$CORTEX_SRC_DIR/scripts/hooks_manager.py" --source-dir "$CORTEX_SRC_DIR" repair
     local result=$?
 
     echo ""
@@ -983,22 +825,7 @@ hooks_uninstall() {
     echo "Uninstalling Cortex hooks..."
     echo ""
 
-    python3 -c "
-import sys
-sys.path.insert(0, '$CORTEX_SRC_DIR')
-try:
-    from src.integrations.hooks import uninstall_hooks
-    success, messages = uninstall_hooks(claude_code=True)
-    for msg in messages:
-        print(f'  {msg}')
-    sys.exit(0 if success else 1)
-except ImportError as e:
-    print(f'Error: Could not load install module: {e}')
-    sys.exit(1)
-except Exception as e:
-    print(f'Error: {e}')
-    sys.exit(1)
-"
+    python3 "$CORTEX_SRC_DIR/scripts/hooks_manager.py" --source-dir "$CORTEX_SRC_DIR" uninstall
     local result=$?
 
     echo ""
@@ -1041,9 +868,9 @@ doctor_essential() {
     fi
 
     # Check 3: Port availability
-    echo -n "Port $DAEMON_PORT: "
+    echo -n "Port $CORTEX_PORT: "
     local port_user
-    port_user=$(lsof -i :$DAEMON_PORT -t 2>/dev/null | head -1)
+    port_user=$(lsof -i :$CORTEX_PORT -t 2>/dev/null | head -1)
     if [ -z "$port_user" ]; then
         if is_daemon_running; then
             echo "WARN - Daemon running but port not bound"
@@ -1053,7 +880,7 @@ doctor_essential() {
     else
         local port_process
         port_process=$(ps -p "$port_user" -o comm= 2>/dev/null || echo "unknown")
-        if docker ps --filter "name=^${DAEMON_CONTAINER_NAME}$" --format '{{.Ports}}' 2>/dev/null | grep -q "$DAEMON_PORT"; then
+        if docker ps --filter "name=^${DAEMON_CONTAINER_NAME}$" --format '{{.Ports}}' 2>/dev/null | grep -q "$CORTEX_PORT"; then
             echo "OK (used by cortex)"
         else
             echo "WARN - In use by $port_process (PID $port_user)"
@@ -1062,7 +889,7 @@ doctor_essential() {
 
     # Check 4: Health endpoint
     echo -n "Health endpoint: "
-    if curl -sf "http://localhost:${DAEMON_PORT}/health" >/dev/null 2>&1; then
+    if curl -sf "http://localhost:${CORTEX_PORT}/health" >/dev/null 2>&1; then
         echo "OK"
     else
         if is_daemon_running; then
@@ -1099,7 +926,7 @@ doctor_comprehensive() {
     # Check 5: ChromaDB collection stats
     echo -n "ChromaDB collection: "
     local stats
-    stats=$(curl -sf "http://localhost:${HTTP_PORT}/browse/stats" 2>/dev/null)
+    stats=$(curl -sf "http://localhost:${CORTEX_PORT}/browse/stats" 2>/dev/null)
     if [ $? -eq 0 ]; then
         local doc_count
         doc_count=$(echo "$stats" | python3 -c "import json,sys; print(json.load(sys.stdin).get('total_documents', 0))" 2>/dev/null)
@@ -1111,7 +938,7 @@ doctor_comprehensive() {
     # Check 6: Index/build info
     echo -n "Build info: "
     local info
-    info=$(curl -sf "http://localhost:${DAEMON_PORT}/info" 2>/dev/null)
+    info=$(curl -sf "http://localhost:${CORTEX_PORT}/info" 2>/dev/null)
     if [ $? -eq 0 ]; then
         echo "OK"
         echo "$info" | python3 -c "
@@ -1161,7 +988,7 @@ print(f\"  Build: {data.get('build_time', 'unknown')}\")
     # Check 10: Schema version
     echo -n "Schema version: "
     local migration_status
-    migration_status=$(curl -sf "http://localhost:${DAEMON_PORT}/migrations/status" 2>/dev/null)
+    migration_status=$(curl -sf "http://localhost:${CORTEX_PORT}/migrations/status" 2>/dev/null)
     if [ $? -eq 0 ]; then
         echo "$migration_status" | python3 -c "
 import json, sys
@@ -1181,7 +1008,7 @@ else:
     echo -n "Version sync: "
     local running_commit
     local local_commit
-    running_commit=$(curl -sf "http://localhost:${DAEMON_PORT}/info" 2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin).get('git_commit','unknown')[:7])" 2>/dev/null || echo "unknown")
+    running_commit=$(curl -sf "http://localhost:${CORTEX_PORT}/info" 2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin).get('git_commit','unknown')[:7])" 2>/dev/null || echo "unknown")
     local_commit=$(git -C "$CORTEX_SRC_DIR" rev-parse --short HEAD 2>/dev/null || echo "unknown")
     if [ "$running_commit" = "$local_commit" ]; then
         echo "OK (both at $local_commit)"
@@ -1310,53 +1137,21 @@ cli_search() {
         exit 1
     fi
 
-    # URL-encode the query
+    # URL-encode the query using helper script (avoids injection issues)
     local encoded_query
-    encoded_query=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$query'))")
+    encoded_query=$(python3 "$CORTEX_SRC_DIR/scripts/cli_helpers.py" url-encode "$query")
 
     # Call the HTTP API
     local response
-    response=$(curl -sf "http://localhost:${HTTP_PORT}/search?q=${encoded_query}&limit=5")
+    response=$(curl -sf "http://localhost:${CORTEX_PORT}/search?q=${encoded_query}&limit=5")
 
     if [ $? -ne 0 ]; then
         echo "Error: Search failed. Is the daemon running?" >&2
         exit 1
     fi
 
-    # Pretty-print results
-    echo "$response" | python3 -c "
-import json
-import sys
-
-try:
-    data = json.load(sys.stdin)
-    query = data.get('query', '')
-    results = data.get('results', [])
-    timing = data.get('timing_ms', 0)
-
-    print(f'Search: \"{query}\" ({len(results)} results, {timing}ms)')
-    print()
-
-    if not results:
-        print('No results found.')
-    else:
-        for i, r in enumerate(results, 1):
-            meta = r.get('metadata', {})
-            score = r.get('score', 0)
-            content = r.get('content', '')[:200]
-
-            # Format source
-            source = meta.get('file_path', meta.get('url', meta.get('project', 'unknown')))
-            doc_type = meta.get('type', 'unknown')
-
-            print(f'{i}. [{doc_type}] {source}')
-            print(f'   Score: {score:.3f}')
-            print(f'   {content}...')
-            print()
-except Exception as e:
-    print(f'Error parsing response: {e}', file=sys.stderr)
-    sys.exit(1)
-"
+    # Pretty-print results using helper script
+    echo "$response" | python3 "$CORTEX_SRC_DIR/scripts/cli_helpers.py" format-search
 }
 
 cli_save() {
@@ -1426,7 +1221,7 @@ print(json.dumps(payload))
     response=$(curl -sf -X POST \
         -H "Content-Type: application/json" \
         -d "$json_payload" \
-        "http://localhost:${HTTP_PORT}/note")
+        "http://localhost:${CORTEX_PORT}/note")
 
     if [ $? -ne 0 ]; then
         echo "Error: Save failed. Is the daemon running?" >&2
@@ -1449,6 +1244,195 @@ else:
 "
 }
 
+cli_status() {
+    if ! is_daemon_running; then
+        echo "Daemon: not running"
+        echo "Run 'cortex daemon start' to start"
+        exit 1
+    fi
+
+    # Check health and get build info
+    local health
+    local info
+    health=$(curl -sf "http://localhost:${CORTEX_PORT}/health" 2>/dev/null)
+    info=$(curl -sf "http://localhost:${CORTEX_PORT}/info" 2>/dev/null)
+
+    if [ $? -ne 0 ]; then
+        echo "Error: Could not reach daemon" >&2
+        exit 1
+    fi
+
+    echo "Cortex Status"
+    echo "============="
+    echo ""
+    echo "Daemon: running"
+    echo ""
+
+    # Parse and display info
+    echo "$info" | python3 -c "
+import json, sys
+try:
+    data = json.load(sys.stdin)
+    print(f\"Build Info:\")
+    print(f\"  Version:   {data.get('version', 'unknown')}\")
+    print(f\"  Commit:    {data.get('git_commit', 'unknown')}\")
+    print(f\"  Built:     {data.get('build_time', 'unknown')}\")
+    print(f\"  Started:   {data.get('startup_time', 'unknown')}\")
+except:
+    print('Could not parse build info')
+"
+    echo ""
+    echo "For full session context, use the MCP tool: orient_session"
+}
+
+cli_initiative() {
+    # Initiative management is available via MCP tools
+    # This CLI command provides guidance on using those tools
+
+    echo "Initiative Management"
+    echo "====================="
+    echo ""
+    echo "Initiatives are managed via the MCP tool: manage_initiative"
+    echo ""
+    echo "In Claude Code, use these commands:"
+    echo ""
+    echo "  Create:   manage_initiative(action='create', repository='<repo>', name='<name>', goal='<goal>')"
+    echo "  List:     manage_initiative(action='list', repository='<repo>')"
+    echo "  Focus:    manage_initiative(action='focus', repository='<repo>', initiative='<name>')"
+    echo "  Complete: manage_initiative(action='complete', repository='<repo>', initiative='<name>', summary='<summary>')"
+    echo ""
+    echo "Or use the orient_session tool to see your current active initiative."
+}
+
+cli_ingest() {
+    local task_id=""
+
+    # Parse options
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --status)
+                task_id="${2:-}"
+                shift
+                if [ -n "$task_id" ] && [[ "$task_id" != --* ]]; then
+                    shift
+                else
+                    task_id=""
+                fi
+                # Show status
+                if ! is_daemon_running; then
+                    echo "Error: Daemon is not running. Start with: cortex daemon start" >&2
+                    exit 1
+                fi
+
+                echo "Ingestion Status"
+                echo "================"
+                echo ""
+                if [ -n "$task_id" ]; then
+                    curl -sf "http://localhost:${CORTEX_PORT}/ingest-status/$task_id" | python3 -c "
+import json, sys
+try:
+    data = json.load(sys.stdin)
+    print(f\"Task ID: {data.get('task_id', 'unknown')}\")
+    print(f\"Repository: {data.get('repository', 'unknown')}\")
+    print(f\"Status: {data.get('status', 'unknown')}\")
+    progress = data.get('progress', {})
+    if progress:
+        print(f\"Progress: {progress.get('files_processed', 0)}/{progress.get('files_total', 0)} files ({progress.get('percent', 0)}%)\")
+except:
+    print('Could not parse task status')
+"
+                else
+                    curl -sf "http://localhost:${CORTEX_PORT}/ingest-status" | python3 -c "
+import json, sys
+try:
+    data = json.load(sys.stdin)
+    tasks = data.get('tasks', [])
+    if not tasks:
+        print('No recent ingestion tasks.')
+    else:
+        for t in tasks[:5]:
+            print(f\"{t.get('status', '?'):10} {t.get('repository', 'unknown'):20} ({t.get('progress', {}).get('percent', 0)}%)\")
+except:
+    print('Could not parse ingestion status')
+"
+                fi
+                return 0
+                ;;
+            *)
+                # Unrecognized argument
+                shift
+                ;;
+        esac
+    done
+
+    # No --status flag - show help for starting ingestion
+    echo "Codebase Ingestion"
+    echo "=================="
+    echo ""
+    echo "To index a codebase, use the MCP tool: ingest_codebase"
+    echo ""
+    echo "In Claude Code:"
+    echo "  ingest_codebase(path='/path/to/repo')"
+    echo "  ingest_codebase(path='/path/to/repo', force_full=True)  # Full re-index"
+    echo ""
+    echo "Check status:"
+    echo "  cortex ingest --status           # List recent tasks"
+    echo "  cortex ingest --status <task_id> # Check specific task"
+}
+
+cli_backup() {
+    local action="${1:-list}"
+    shift || true
+
+    if ! is_daemon_running; then
+        echo "Error: Daemon is not running. Start with: cortex daemon start" >&2
+        exit 1
+    fi
+
+    case "$action" in
+        create)
+            local label="${1:-manual}"
+            local response
+            # Label is passed as query parameter
+            response=$(curl -sf -X POST "http://localhost:${CORTEX_PORT}/admin/backup?label=$label")
+
+            if [ $? -ne 0 ]; then
+                echo "Error: Backup failed" >&2
+                exit 1
+            fi
+
+            echo "$response" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+status = data.get('status', 'unknown')
+if status == 'success':
+    path = data.get('backup_path', 'unknown')
+    print(f'Backup created: {path}')
+else:
+    error = data.get('error', 'Unknown error')
+    print(f'Backup failed: {error}')
+"
+            ;;
+        list)
+            local response
+            response=$(curl -sf "http://localhost:${CORTEX_PORT}/admin/backups" 2>/dev/null)
+            if [ $? -ne 0 ]; then
+                echo "Error: Could not fetch backups" >&2
+                exit 1
+            fi
+            echo "$response" | python3 "$CORTEX_SRC_DIR/scripts/cli_helpers.py" format-backups
+            ;;
+        *)
+            echo "Usage: cortex backup {create|list}" >&2
+            echo "" >&2
+            echo "Commands:" >&2
+            echo "  create [label]    Create a new backup" >&2
+            echo "  list              List all backups" >&2
+            exit 1
+            ;;
+    esac
+}
+
 # --- Help Command ---
 
 show_help() {
@@ -1460,9 +1444,13 @@ USAGE:
 
 COMMANDS:
     (default)           Start MCP bridge (auto-starts daemon if needed)
+    status              Show session context (index status, active initiative)
     search <query>      Search memory directly (bypasses LLM)
     save [opts] <text>  Save a note directly (bypasses LLM)
                         Options: -t <title>, -p <project>, --tags <a,b>
+    initiative <action> Manage initiatives (create, list, focus, complete)
+    ingest [path]       Index a codebase into memory (--status to check progress)
+    backup <action>     Manage backups (create, list)
     update              Update Cortex (pull, rebuild, migrate, restart)
     doctor              Check system health (add --verbose for full check)
     init                Interactive setup, creates ~/.cortex/config.yaml
@@ -1490,16 +1478,14 @@ CONFIGURATION:
     Config file options:
       code_paths        List of directories to mount (e.g., ["~/Projects"])
       debug             true or false
-      daemon_port       Daemon port for MCP communication (default: 8000)
-      http_port         HTTP debug server port (default: 8080)
+      port              Server port (default: 8000)
       llm               LLM provider settings for summarization
       autocapture       Auto-capture settings for session memory
 
 ENVIRONMENT VARIABLES (override config.yaml):
     CORTEX_CODE_PATHS       Comma-separated list of code directories
     CORTEX_DEBUG            Enable debug logging (true/false)
-    CORTEX_DAEMON_PORT      Daemon port (default: 8000)
-    CORTEX_HTTP_PORT        HTTP debug server port (default: 8080)
+    CORTEX_PORT             Server port (default: 8000)
     CORTEX_LLM_PROVIDER     LLM provider: anthropic, claude-cli, ollama, openrouter, none
     ANTHROPIC_API_KEY       Required for llm.primary_provider="anthropic"
     OPENROUTER_API_KEY      Required for llm.primary_provider="openrouter"
@@ -1513,9 +1499,13 @@ QUICK START:
 EXAMPLES:
     cortex init                 # First-time setup
     cortex                      # Start MCP server (normal usage)
+    cortex status               # Check session context
     cortex search auth flow     # Quick search from terminal
     cortex save "Use JWT"       # Save a quick note
     cortex save -t "Decision" "We chose Redis for caching"
+    cortex initiative list      # List all initiatives
+    cortex ingest ~/myproject   # Index a codebase
+    cortex backup create        # Create a backup
     cortex daemon status        # Check if daemon is healthy
     cortex daemon logs          # Debug issues
     cortex config edit          # Modify config
@@ -1597,6 +1587,21 @@ case "${1:-}" in
     save)
         shift
         cli_save "$@"
+        ;;
+    status)
+        cli_status
+        ;;
+    initiative)
+        shift
+        cli_initiative "$@"
+        ;;
+    ingest)
+        shift
+        cli_ingest "$@"
+        ;;
+    backup)
+        shift
+        cli_backup "$@"
         ;;
     update)
         do_update
