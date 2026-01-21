@@ -224,10 +224,10 @@ build_docker_volumes() {
 
 build_docker_env() {
     DOCKER_ENVS=()
-    [ -n "$CORTEX_DEBUG" ] && DOCKER_ENVS+=("-e" "CORTEX_DEBUG=$CORTEX_DEBUG")
-    [ -n "$ANTHROPIC_API_KEY" ] && DOCKER_ENVS+=("-e" "ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY")
-    [ -n "$OPENROUTER_API_KEY" ] && DOCKER_ENVS+=("-e" "OPENROUTER_API_KEY=$OPENROUTER_API_KEY")
-    [ -n "$CORTEX_LOG_FILE" ] && DOCKER_ENVS+=("-e" "CORTEX_LOG_FILE=$CORTEX_LOG_FILE")
+    [ -n "${CORTEX_DEBUG:-}" ] && DOCKER_ENVS+=("-e" "CORTEX_DEBUG=$CORTEX_DEBUG")
+    [ -n "${ANTHROPIC_API_KEY:-}" ] && DOCKER_ENVS+=("-e" "ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY")
+    [ -n "${OPENROUTER_API_KEY:-}" ] && DOCKER_ENVS+=("-e" "OPENROUTER_API_KEY=$OPENROUTER_API_KEY")
+    [ -n "${CORTEX_LOG_FILE:-}" ] && DOCKER_ENVS+=("-e" "CORTEX_LOG_FILE=$CORTEX_LOG_FILE")
 
     # Determine LLM provider: env var overrides config file
     local llm_provider="${CORTEX_LLM_PROVIDER:-${CONFIG_LLM_PROVIDER:-none}}"
