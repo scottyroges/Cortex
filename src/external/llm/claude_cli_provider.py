@@ -160,11 +160,17 @@ class ClaudeCLIProvider(LLMProvider):
                 model,
             ]
 
+            # Set env var to prevent session end hook from triggering
+            # This prevents infinite loop: session end -> summarize -> claude -p -> session end -> ...
+            env = os.environ.copy()
+            env["CORTEX_INTERNAL_SUMMARIZER"] = "1"
+
             result = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
                 timeout=timeout,
+                env=env,
             )
 
             latency_ms = (time.time() - start_time) * 1000

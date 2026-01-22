@@ -18,10 +18,11 @@
 #   Run 'cortex init' to create this file interactively.
 #
 # Environment variables (override config.yaml):
-#   CORTEX_CODE_PATHS    - Comma-separated list of code directories to mount
-#   CORTEX_DEBUG         - Enable debug logging (true/false)
-#   CORTEX_PORT          - Server port (default: 8000)
-#   ANTHROPIC_API_KEY    - Required for LLM provider="anthropic"
+#   CORTEX_CODE_PATHS       - Comma-separated list of code directories to mount
+#   CORTEX_DEBUG            - Enable debug logging (true/false)
+#   CORTEX_PORT             - Server port (default: 8080)
+#   CORTEX_SUMMARIZER_PORT  - Summarizer proxy port (default: 8081)
+#   ANTHROPIC_API_KEY       - Required for LLM provider="anthropic"
 #
 
 # --- Error Handling ---
@@ -38,8 +39,13 @@ trap _cleanup EXIT
 
 # --- Configuration ---
 DAEMON_CONTAINER_NAME="cortex-daemon"
-CORTEX_PORT="${CORTEX_PORT:-8000}"
-SUMMARIZER_PORT="${CORTEX_SUMMARIZER_PORT:-8081}"
+BRIDGE_CONTAINER_NAME="cortex-bridge"
+# Port defaults are applied AFTER load_config, not here
+# Store original env var values (empty if not set by user)
+_ORIG_CORTEX_PORT="${CORTEX_PORT:-}"
+_ORIG_SUMMARIZER_PORT="${CORTEX_SUMMARIZER_PORT:-}"
+CORTEX_PORT=""  # Will be set by load_config or defaults below
+SUMMARIZER_PORT=""  # Will be set by load_config or defaults below
 IMAGE_NAME="cortex"
 GHCR_IMAGE="ghcr.io/scottyroges/cortex"
 
@@ -79,6 +85,7 @@ CONFIG_FILE="$DATA_PATH/config.yaml"
 CONFIG_CODE_PATHS=""
 CONFIG_DEBUG=""
 CONFIG_PORT=""
+CONFIG_SUMMARIZER_PORT=""
 CONFIG_LLM_PROVIDER=""
 
 # Track env var overrides (for display purposes)
@@ -88,9 +95,10 @@ ENV_OVERRIDE_PORT=""
 
 load_config() {
     # Capture original env vars before loading config
+    # Note: _ORIG_CORTEX_PORT is captured at script start, before any defaults
     local orig_code_paths="$CODE_PATHS"
     local orig_debug="${CORTEX_DEBUG:-}"
-    local orig_port="${CORTEX_PORT:-}"
+    local orig_port="$_ORIG_CORTEX_PORT"
 
     # Load config from ~/.cortex/config.yaml if it exists
     if [ -f "$CONFIG_FILE" ]; then
@@ -103,6 +111,7 @@ load_config() {
                     CODE_PATHS) CONFIG_CODE_PATHS="$value" ;;
                     DEBUG) CONFIG_DEBUG="$value" ;;
                     PORT) CONFIG_PORT="$value" ;;
+                    SUMMARIZER_PORT) CONFIG_SUMMARIZER_PORT="$value" ;;
                     LLM_PROVIDER) CONFIG_LLM_PROVIDER="$value" ;;
                 esac
             done <<< "$config"
@@ -122,13 +131,29 @@ load_config() {
         ENV_OVERRIDE_DEBUG="true"
     fi
 
-    # Apply port config
-    if [ -z "${CORTEX_PORT:-}" ] && [ -n "$CONFIG_PORT" ]; then
+    # Apply port config (env var overrides config file)
+    if [ -n "$orig_port" ]; then
+        # User set env var - use it and note override
+        CORTEX_PORT="$orig_port"
+        if [ -n "$CONFIG_PORT" ]; then
+            ENV_OVERRIDE_PORT="true"
+        fi
+    elif [ -n "$CONFIG_PORT" ]; then
+        # No env var - use config file value
         CORTEX_PORT="$CONFIG_PORT"
-    elif [ -n "$orig_port" ] && [ -n "$CONFIG_PORT" ]; then
-        ENV_OVERRIDE_PORT="true"
+    fi
+
+    # Apply summarizer port config (env var overrides config file)
+    if [ -n "$_ORIG_SUMMARIZER_PORT" ]; then
+        SUMMARIZER_PORT="$_ORIG_SUMMARIZER_PORT"
+    elif [ -n "$CONFIG_SUMMARIZER_PORT" ]; then
+        SUMMARIZER_PORT="$CONFIG_SUMMARIZER_PORT"
     fi
 }
+
+# Apply defaults for anything not set by config or env vars
+CORTEX_PORT="${CORTEX_PORT:-8080}"
+SUMMARIZER_PORT="${SUMMARIZER_PORT:-8081}"
 
 # Load config on script start
 load_config
@@ -232,6 +257,8 @@ build_docker_volumes() {
     mkdir -p "$DATA_PATH"
     mkdir -p "$DATA_PATH/db"
     DOCKER_VOLUMES+=("-v" "$DATA_PATH:$DATA_PATH")
+    # Mount the data directory to where Docker code expects it (for auto-detection)
+    DOCKER_VOLUMES+=("-v" "$DATA_PATH:/app/cortex_data")
     # Mount the database directory to where Docker code expects it
     DOCKER_VOLUMES+=("-v" "$DATA_PATH/db:/app/cortex_db")
 
@@ -281,12 +308,17 @@ build_docker_env() {
 # --- Summarizer Functions (for claude-cli LLM provider) ---
 
 is_summarizer_running() {
+    # First check PID file
     if [ -f "$SUMMARIZER_PID_FILE" ]; then
         local pid
         pid=$(cat "$SUMMARIZER_PID_FILE")
         if kill -0 "$pid" 2>/dev/null; then
             return 0
         fi
+    fi
+    # Fallback: check if port is actually in use and responding
+    if curl -sf "http://localhost:$SUMMARIZER_PORT/health" >/dev/null 2>&1; then
+        return 0
     fi
     return 1
 }
@@ -307,6 +339,15 @@ start_summarizer() {
     fi
 
     if is_summarizer_running; then
+        # If running but no PID file, try to recover it
+        if [ ! -f "$SUMMARIZER_PID_FILE" ]; then
+            local running_pid
+            running_pid=$(lsof -ti :$SUMMARIZER_PORT 2>/dev/null | head -1)
+            if [ -n "$running_pid" ]; then
+                echo "$running_pid" > "$SUMMARIZER_PID_FILE"
+                log_info "Recovered summarizer PID file (PID: $running_pid)"
+            fi
+        fi
         log_info "Summarizer is already running"
         return 0
     fi
@@ -348,9 +389,16 @@ start_summarizer() {
 stop_summarizer() {
     if is_summarizer_running; then
         local pid
-        pid=$(cat "$SUMMARIZER_PID_FILE")
-        log_info "Stopping summarizer (PID: $pid)..."
-        kill "$pid" 2>/dev/null || true
+        # Try to get PID from file, fallback to finding by port
+        if [ -f "$SUMMARIZER_PID_FILE" ]; then
+            pid=$(cat "$SUMMARIZER_PID_FILE")
+        else
+            pid=$(lsof -ti :$SUMMARIZER_PORT 2>/dev/null | head -1)
+        fi
+        if [ -n "$pid" ]; then
+            log_info "Stopping summarizer (PID: $pid)..."
+            kill "$pid" 2>/dev/null || true
+        fi
         rm -f "$SUMMARIZER_PID_FILE"
         log_info "Summarizer stopped"
     fi
@@ -359,6 +407,8 @@ stop_summarizer() {
 start_daemon() {
     if is_daemon_running; then
         log_info "Daemon is already running"
+        # Still ensure summarizer is running (and recover PID file if needed)
+        start_summarizer
         return 0
     fi
 
@@ -366,6 +416,9 @@ start_daemon() {
     docker rm "$DAEMON_CONTAINER_NAME" 2>/dev/null || true
 
     log_info "Starting Cortex daemon..."
+
+    # Start summarizer FIRST if using claude-cli (daemon queue processor needs it immediately)
+    start_summarizer
 
     build_docker_volumes
     build_docker_env
@@ -375,16 +428,11 @@ start_daemon() {
         --restart unless-stopped \
         -p "${CORTEX_PORT}:8080" \
         "${DOCKER_VOLUMES[@]}" \
-        -e "CORTEX_HTTP_PORT=8080" \
         "${DOCKER_ENVS[@]}" \
         "$IMAGE_NAME" daemon >&2
 
     if wait_for_daemon; then
         log_info "Daemon started on port $CORTEX_PORT"
-
-        # Start summarizer if using claude-cli
-        start_summarizer
-
         return 0
     else
         log_error "Daemon failed to start"
@@ -494,13 +542,13 @@ init_config() {
     # Port
     echo ""
     echo "Server port (for MCP and HTTP API):"
-    read -r -p "Port [8000]: " port_input
-    local port="${port_input:-8000}"
+    read -r -p "Port [8080]: " port_input
+    local port="${port_input:-8080}"
 
     # Validate port is a number and in valid range
     if ! [[ "$port" =~ ^[0-9]+$ ]] || [ "$port" -lt 1 ] || [ "$port" -gt 65535 ]; then
-        echo "Invalid port, using 8000"
-        port="8000"
+        echo "Invalid port, using 8080"
+        port="8080"
     fi
 
     # Build code_paths YAML
@@ -614,6 +662,7 @@ show_config() {
     echo "  code_paths: ${CODE_PATHS:-<not set>}"
     echo "  debug: ${CORTEX_DEBUG:-<not set>}"
     echo "  port: $CORTEX_PORT"
+    echo "  summarizer_port: $SUMMARIZER_PORT"
     echo ""
 
     # Show any env var overrides
@@ -665,6 +714,8 @@ run_bridge() {
     build_docker_env
 
     # Run bridge in foreground, connecting to daemon
+    # Note: No --name to avoid conflicts when Claude Code reconnects
+    # --rm ensures container is cleaned up on exit
     exec docker run -i --rm \
         --network host \
         -e "CORTEX_DAEMON_URL=http://localhost:${CORTEX_PORT}" \
@@ -1119,10 +1170,16 @@ except Exception as e:
 
             # Check if summarizer proxy is running (needed for Docker mode)
             echo -n "  Summarizer proxy: "
-            if is_summarizer_running; then
+            if [ -f "$SUMMARIZER_PID_FILE" ]; then
                 local pid
                 pid=$(cat "$SUMMARIZER_PID_FILE")
-                echo "OK (PID: $pid)"
+                if kill -0 "$pid" 2>/dev/null; then
+                    echo "OK (PID: $pid)"
+                else
+                    echo "STALE PID FILE (process $pid not running)"
+                fi
+            elif curl -sf "http://localhost:$SUMMARIZER_PORT/health" >/dev/null 2>&1; then
+                echo "OK (running on port $SUMMARIZER_PORT, no PID file)"
             else
                 echo "NOT RUNNING"
                 echo "    Will be started when daemon starts"
@@ -1540,14 +1597,16 @@ CONFIGURATION:
     Config file options:
       code_paths        List of directories to mount (e.g., ["~/Projects"])
       debug             true or false
-      port              Server port (default: 8000)
+      port              Server port (default: 8080)
+      summarizer_port   Summarizer proxy port (default: 8081, claude-cli only)
       llm               LLM provider settings for summarization
       autocapture       Auto-capture settings for session memory
 
 ENVIRONMENT VARIABLES (override config.yaml):
     CORTEX_CODE_PATHS       Comma-separated list of code directories
     CORTEX_DEBUG            Enable debug logging (true/false)
-    CORTEX_PORT             Server port (default: 8000)
+    CORTEX_PORT             Server port (default: 8080)
+    CORTEX_SUMMARIZER_PORT  Summarizer proxy port (default: 8081)
     CORTEX_LLM_PROVIDER     LLM provider: anthropic, claude-cli, ollama, openrouter, none
     ANTHROPIC_API_KEY       Required for llm.primary_provider="anthropic"
     OPENROUTER_API_KEY      Required for llm.primary_provider="openrouter"
@@ -1593,17 +1652,17 @@ case "${1:-}" in
                 stop_daemon
                 ;;
             restart)
-                local force_build=false
                 if [ "${3:-}" = "--build" ] || [ "${3:-}" = "-b" ]; then
-                    force_build=true
-                fi
-                stop_daemon
-                if [ "$force_build" = true ]; then
+                    stop_daemon
                     build_image
-                elif ! pull_image; then
-                    build_image
+                    start_daemon
+                else
+                    stop_daemon
+                    if ! pull_image; then
+                        build_image
+                    fi
+                    start_daemon
                 fi
-                start_daemon
                 ;;
             status)
                 daemon_status
@@ -1612,16 +1671,8 @@ case "${1:-}" in
                 daemon_logs
                 ;;
             rebuild)
-                local force_build=false
-                if [ "${3:-}" = "--build" ] || [ "${3:-}" = "-b" ]; then
-                    force_build=true
-                fi
                 stop_daemon
-                if [ "$force_build" = true ]; then
-                    build_image
-                elif ! pull_image; then
-                    build_image
-                fi
+                build_image
                 start_daemon
                 ;;
             *)

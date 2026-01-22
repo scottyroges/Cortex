@@ -77,11 +77,11 @@ code_paths:
   - ~/Projects
   - ~/Work
 
-# Daemon port for MCP communication
-daemon_port: 8000
+# Server port (MCP and HTTP API)
+port: 8080
 
-# HTTP debug server port
-http_port: 8080
+# Summarizer proxy port (only used with claude-cli LLM provider)
+summarizer_port: 8081
 
 # Enable debug logging
 debug: false
@@ -99,8 +99,8 @@ autocapture:
 |---------|------|---------|-------------|
 | `code_paths` | list | `[]` | Directories containing code to index |
 | `debug` | bool | `false` | Enable debug logging |
-| `daemon_port` | int | `8000` | Daemon port for MCP communication |
-| `http_port` | int | `8080` | HTTP debug server port |
+| `port` | int | `8080` | Server port (MCP and HTTP API) |
+| `summarizer_port` | int | `8081` | Summarizer proxy port (claude-cli only) |
 | `llm.primary_provider` | string | `"claude-cli"` | LLM provider for summarization |
 | `autocapture.enabled` | bool | `true` | Enable auto-capture on session end |
 
@@ -127,8 +127,8 @@ Environment variables can override config.yaml (useful for CI/testing):
 |----------|-------------|
 | `CORTEX_CODE_PATHS` | Comma-separated code directories |
 | `CORTEX_DEBUG` | Enable debug logging |
-| `CORTEX_DAEMON_PORT` | Daemon port (default: `8000`) |
-| `CORTEX_HTTP_PORT` | HTTP debug server port (default: `8080`) |
+| `CORTEX_PORT` | Server port (default: `8080`) |
+| `CORTEX_SUMMARIZER_PORT` | Summarizer proxy port (default: `8081`) |
 | `ANTHROPIC_API_KEY` | Required for LLM provider="anthropic" |
 
 ## Daemon Management

@@ -220,6 +220,9 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         logger.info("Bridge interrupted")
         sys.exit(0)
+    except BrokenPipeError:
+        # stdout closed - normal when Claude Code disconnects
+        sys.exit(0)
     except Exception as e:
         logger.error(f"Bridge error: {e}")
         sys.exit(1)

@@ -99,38 +99,53 @@ def _check_ghcr_latest() -> Optional[dict]:
     """
     Check GHCR for the latest available Docker image version.
 
-    Uses GitHub's container registry API to list package versions.
+    Uses GHCR's anonymous token flow to list tags without authentication:
+    1. Get anonymous token from ghcr.io/token endpoint
+    2. Use token to list tags from v2 registry API
 
     Returns:
         Dict with update info, or None if check fails
     """
-    # GitHub packages API endpoint for container versions
-    # Format: /users/{owner}/packages/container/{package}/versions
-    url = "https://api.github.com/users/scottyroges/packages/container/cortex/versions"
-
     try:
-        data = http_json_get(
-            url,
+        # Step 1: Get anonymous token for reading the repository
+        token_url = "https://ghcr.io/token?scope=repository:scottyroges/cortex:pull"
+        token_data = http_json_get(
+            token_url,
+            headers={"User-Agent": "Cortex"},
+            timeout=5,
+        )
+
+        if not token_data or "token" not in token_data:
+            logger.debug("Failed to get GHCR anonymous token")
+            return None
+
+        token = token_data["token"]
+
+        # Step 2: List tags using the token
+        tags_url = "https://ghcr.io/v2/scottyroges/cortex/tags/list"
+        tags_data = http_json_get(
+            tags_url,
             headers={
-                "Accept": "application/vnd.github.v3+json",
+                "Authorization": f"Bearer {token}",
                 "User-Agent": "Cortex",
             },
             timeout=5,
         )
 
-        if not data or not isinstance(data, list):
+        if not tags_data or "tags" not in tags_data:
+            logger.debug("Failed to list GHCR tags")
             return None
+
+        tags = tags_data["tags"]
 
         # Find the latest semver tag (exclude 'latest', 'sha-*', etc.)
         semver_pattern = re.compile(r"^\d+\.\d+\.\d+$")
         latest_version = None
 
-        for version in data:
-            tags = version.get("metadata", {}).get("container", {}).get("tags", [])
-            for tag in tags:
-                if semver_pattern.match(tag):
-                    if latest_version is None or _compare_versions(tag, latest_version) > 0:
-                        latest_version = tag
+        for tag in tags:
+            if semver_pattern.match(tag):
+                if latest_version is None or _compare_versions(tag, latest_version) > 0:
+                    latest_version = tag
 
         if not latest_version:
             return None

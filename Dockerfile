@@ -42,7 +42,7 @@ COPY --from=frontend-builder /web/dist /app/static
 RUN mkdir -p /app/cortex_db
 
 # Expose HTTP port (serves MCP API + Web UI)
-# User configures host ports via daemon_port and http_port settings
+# User configures host port mapping via CORTEX_PORT env var or port in config.yaml
 EXPOSE 8080
 
 # Entrypoint dispatcher supports multiple modes:

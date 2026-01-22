@@ -451,6 +451,11 @@ def detect_repository(project_path: str) -> str:
 
 def main():
     """Main hook entry point."""
+    # Skip if this is an internal summarizer call (prevents infinite loop)
+    # When Cortex uses `claude -p` to summarize, it sets this env var
+    if os.environ.get("CORTEX_INTERNAL_SUMMARIZER"):
+        return 0
+
     try:
         # Read input from stdin
         input_data = json.loads(sys.stdin.read())

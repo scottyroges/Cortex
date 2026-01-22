@@ -20,11 +20,11 @@ code_paths:
   # - ~/Projects
   # - ~/Work
 
-# Daemon port for MCP communication
-daemon_port: 8000
+# Server port (MCP and HTTP API)
+port: 8080
 
-# HTTP debug server port (for CLI search, web browser, and auto-capture)
-http_port: 8080
+# Summarizer proxy port (only used with claude-cli LLM provider)
+summarizer_port: 8081
 
 # Enable debug logging
 debug: false

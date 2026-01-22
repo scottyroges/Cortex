@@ -33,6 +33,7 @@ def parse_config(config_path: str) -> dict:
         "CODE_PATHS": "",
         "DEBUG": "",
         "PORT": "",
+        "SUMMARIZER_PORT": "",
         "LLM_PROVIDER": "",
     }
 
@@ -54,10 +55,13 @@ def parse_config(config_path: str) -> dict:
     if debug is not None:
         result["DEBUG"] = "true" if debug else "false"
 
-    # Support both old names and new consolidated name
-    port = config.get("port") or config.get("daemon_port")
+    port = config.get("port")
     if port:
         result["PORT"] = str(port)
+
+    summarizer_port = config.get("summarizer_port")
+    if summarizer_port:
+        result["SUMMARIZER_PORT"] = str(summarizer_port)
 
     # Extract nested llm.primary_provider
     llm = config.get("llm", {})
@@ -172,8 +176,11 @@ def create_default_config(config_path: str) -> None:
 code_paths:
   # - ~/Projects
 
-# Daemon port for all communication (MCP and HTTP API)
-port: 8000
+# Server port (MCP and HTTP API)
+port: 8080
+
+# Summarizer proxy port (only used with claude-cli LLM provider)
+summarizer_port: 8081
 
 # Enable debug logging
 debug: false
