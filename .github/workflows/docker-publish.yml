@@ -39,19 +39,15 @@ jobs:
           echo "tag=v$VERSION" >> $GITHUB_OUTPUT
           echo "Detected version: $VERSION"
 
-      - name: Check if version tag already exists
-        id: check_tag
+      - name: Fail if version tag already exists
         run: |
           if git rev-parse "refs/tags/${{ steps.version.outputs.tag }}" >/dev/null 2>&1; then
-            echo "exists=true" >> $GITHUB_OUTPUT
-            echo "Tag ${{ steps.version.outputs.tag }} already exists, skipping publish"
-          else
-            echo "exists=false" >> $GITHUB_OUTPUT
-            echo "Tag ${{ steps.version.outputs.tag }} is new, proceeding with build"
+            echo "::error::Tag ${{ steps.version.outputs.tag }} already exists. Bump the version in src/__init__.py to release a new version."
+            exit 1
           fi
+          echo "Tag ${{ steps.version.outputs.tag }} is new, proceeding with build"
 
       - name: Log in to GitHub Container Registry
-        if: steps.check_tag.outputs.exists == 'false'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -59,11 +55,9 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Docker Buildx
-        if: steps.check_tag.outputs.exists == 'false'
         uses: docker/setup-buildx-action@v3
 
       - name: Build and push Docker image
-        if: steps.check_tag.outputs.exists == 'false'
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -82,7 +76,6 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Create and push git tag
-        if: steps.check_tag.outputs.exists == 'false'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -91,7 +84,6 @@ jobs:
           echo "Created and pushed tag ${{ steps.version.outputs.tag }}"
 
       - name: Summary
-        if: steps.check_tag.outputs.exists == 'false'
         run: |
           echo "### ✅ Published" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -101,9 +93,3 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Users can update with: \`cortex update\`" >> $GITHUB_STEP_SUMMARY
 
-      - name: Skip summary
-        if: steps.check_tag.outputs.exists == 'true'
-        run: |
-          echo "### ⏭️ Skipped" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Version ${{ steps.version.outputs.version }} already published." >> $GITHUB_STEP_SUMMARY
